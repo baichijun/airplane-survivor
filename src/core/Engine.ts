@@ -1,5 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config/balance';
 
+/** 单帧最大时间步长（秒），防止切后台后物理计算失控 */
 const MAX_DELTA = 0.05;
 
 /** 画布引擎：尺寸、渲染上下文、帧间隔 */

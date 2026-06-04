@@ -1,5 +1,6 @@
 import type { EnemyConfig, EnemyType, BulletAimType, BulletShape } from '../types';
-import { ENEMY_CONFIGS } from '../config/balance';
+import { ENEMY_CONFIGS, scaledEnemyBulletDamage, scaledEnemyMaxHp } from '../config/balance';
+import { drawEnemyShip } from '../ui/ShipSprites';
 
 /** 敌机实体 */
 export class Enemy {
@@ -24,16 +25,17 @@ export class Enemy {
   targetX = 0;
   targetY = 0;
 
-  constructor(type: EnemyType, x: number, y: number) {
+  constructor(type: EnemyType, x: number, y: number, elapsedSec = 0) {
     const cfg: EnemyConfig = ENEMY_CONFIGS[type];
+    const maxHp = scaledEnemyMaxHp(type, elapsedSec);
     this.type = type;
     this.x = x;
     this.y = y;
-    this.hp = cfg.hp;
-    this.maxHp = cfg.hp;
+    this.hp = maxHp;
+    this.maxHp = maxHp;
     this.speed = cfg.speed;
     this.attackSpeed = cfg.attackSpeed;
-    this.bulletDamage = cfg.bulletDamage;
+    this.bulletDamage = scaledEnemyBulletDamage(type, elapsedSec);
     this.aimType = cfg.aimType;
     this.bulletShape = cfg.bulletShape;
     this.hitRadius = cfg.hitRadius;
@@ -44,11 +46,11 @@ export class Enemy {
     this.attackTimer = Math.random() * cfg.attackSpeed;
   }
 
-  update(dt: number, playerX: number, playerY: number): void {
+  update(dt: number, playerX: number, playerY: number, speedMult = 1): void {
     if (!this.active) return;
     this.targetX = playerX;
     this.targetY = playerY;
-    this.y += this.speed * dt;
+    this.y += this.speed * speedMult * dt;
     this.attackTimer += dt;
   }
 
@@ -69,10 +71,9 @@ export class Enemy {
     if (!this.active) return;
     const hw = this.width / 2;
     const hh = this.height / 2;
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x - hw, this.y - hh, this.width, this.height);
 
-    // 血条
+    drawEnemyShip(ctx, this.type, this.x, this.y, this.width, this.height);
+
     const barW = this.width;
     const barH = 3;
     const ratio = Math.max(0, this.hp / this.maxHp);

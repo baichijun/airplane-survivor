@@ -1,11 +1,24 @@
 import {
+  DRONE_ATTACK_SPEED_MULT,
+  DRONE_DAMAGE_MULT,
+  EASY_MODE_INITIAL_HP_MULT,
+  EASY_MODE_REGEN_AMOUNT,
+  EASY_MODE_REGEN_INTERVAL,
   GAME_WIDTH,
   GAME_HEIGHT,
   INVINCIBLE_DURATION,
   PLAYER_INITIAL,
   PLAYER_MARGIN,
+  RELIC_DODGE_CHANCE,
+  RELIC_KINETIC_HITS_PER_PROC,
+  RELIC_KINETIC_SHIELD_CD_REDUCTION,
+  RELIC_VAMP_COOLDOWN,
 } from '../config/balance';
+import { getPlayerShieldCooldown, getPlayerShieldDuration } from '../config/relics';
+import type { GameMode, RelicId } from '../types';
 import type { Input } from '../core/Input';
+import { Drone } from './Drone';
+import { drawPlayerShip } from '../ui/ShipSprites';
 
 /** 玩家飞机 */
 export class Player {
@@ -21,6 +34,23 @@ export class Player {
   bulletSpeed: number;
   attackTimer = 0;
   invincibleTimer = 0;
+  shieldActiveTimer = 0;
+  shieldCooldownTimer = 0;
+  vampCooldownTimer = 0;
+  /** 加固舰体：生命上限与恢复效果倍率 */
+  hpGainMultiplier = 1;
+  /** 升级叠加：无人机伤害倍率（相对 DRONE_DAMAGE_MULT） */
+  droneDamageMult = 1;
+  /** 升级叠加：无人机攻速倍率（越大射得越快） */
+  droneAttackSpeedMult = 1;
+  /** 动能转化：累计命中敌机次数 */
+  kineticHitCounter = 0;
+  /** 当前难度模式 */
+  mode: GameMode = 'normal';
+  /** 简单模式：生命恢复计时 */
+  regenTimer = 0;
+  readonly drones: [Drone, Drone];
+  readonly relics = new Set<RelicId>();
 
   constructor() {
     this.x = GAME_WIDTH / 2;
@@ -33,13 +63,20 @@ export class Player {
     this.hitRadius = PLAYER_INITIAL.hitRadius;
     this.bulletCount = PLAYER_INITIAL.bulletCount;
     this.bulletSpeed = PLAYER_INITIAL.bulletSpeed;
+    this.drones = [new Drone('left'), new Drone('right')];
   }
 
-  reset(): void {
+  reset(mode: GameMode = 'normal'): void {
+    this.mode = mode;
     this.x = GAME_WIDTH / 2;
     this.y = GAME_HEIGHT - 80;
-    this.hp = PLAYER_INITIAL.maxHp;
-    this.maxHp = PLAYER_INITIAL.maxHp;
+    const baseMaxHp = PLAYER_INITIAL.maxHp;
+    if (mode === 'easy') {
+      this.maxHp = baseMaxHp * EASY_MODE_INITIAL_HP_MULT;
+    } else {
+      this.maxHp = baseMaxHp;
+    }
+    this.hp = this.maxHp;
     this.speed = PLAYER_INITIAL.speed;
     this.attackSpeed = PLAYER_INITIAL.attackSpeed;
     this.bulletDamage = PLAYER_INITIAL.bulletDamage;
@@ -48,56 +85,161 @@ export class Player {
     this.bulletSpeed = PLAYER_INITIAL.bulletSpeed;
     this.attackTimer = 0;
     this.invincibleTimer = 0;
+    this.shieldActiveTimer = 0;
+    this.shieldCooldownTimer = 0;
+    this.vampCooldownTimer = 0;
+    this.hpGainMultiplier = 1;
+    this.droneDamageMult = 1;
+    this.droneAttackSpeedMult = 1;
+    this.kineticHitCounter = 0;
+    this.regenTimer = 0;
+    this.relics.clear();
+    for (const drone of this.drones) drone.reset();
+  }
+
+  hasRelic(id: RelicId): boolean {
+    return this.relics.has(id);
+  }
+
+  /** 当前无人机单发伤害（含升级与自机威力，战斗用，最低 1） */
+  getDroneBulletDamage(): number {
+    return Math.max(1, this.getDroneBulletDamageRaw());
+  }
+
+  /** 无人机理论伤害（展示用，不做最低 1 限制） */
+  getDroneBulletDamageRaw(): number {
+    return this.bulletDamage * DRONE_DAMAGE_MULT * this.droneDamageMult;
+  }
+
+  /** 当前无人机射击间隔（秒，越小越快） */
+  getDroneAttackInterval(): number {
+    return (this.attackSpeed * DRONE_ATTACK_SPEED_MULT) / this.droneAttackSpeedMult;
+  }
+
+  get isShieldActive(): boolean {
+    return this.shieldActiveTimer > 0;
+  }
+
+  get shieldCooldownRatio(): number {
+    const cd = getPlayerShieldCooldown(this);
+    if (this.shieldCooldownTimer <= 0) return 1;
+    return 1 - this.shieldCooldownTimer / cd;
+  }
+
+  tryActivateShield(): boolean {
+    const cd = getPlayerShieldCooldown(this);
+    if (this.shieldCooldownTimer > 0 || this.shieldActiveTimer > 0) return false;
+    this.shieldActiveTimer = getPlayerShieldDuration(this);
+    this.shieldCooldownTimer = cd;
+    return true;
+  }
+
+  private applyMovement(dt: number, input: Input, minY: number): void {
+    const dir = input.getMoveDirection();
+    if (dir.x !== 0 || dir.y !== 0) {
+      this.x += dir.x * this.speed * dt;
+      this.y += dir.y * this.speed * dt;
+    }
+
+    if (input.touchTarget) {
+      const target = input.touchTarget;
+      const lerp = 1 - Math.pow(0.001, dt);
+      this.x += (target.x - this.x) * lerp;
+      this.y += (target.y - this.y) * lerp;
+    }
+
+    this.x = Math.max(PLAYER_MARGIN, Math.min(GAME_WIDTH - PLAYER_MARGIN, this.x));
+    this.y = Math.max(minY, Math.min(GAME_HEIGHT - PLAYER_MARGIN, this.y));
   }
 
   update(dt: number, input: Input): void {
-    const dir = input.getMoveDirection();
-    if (dir.x !== 0 || dir.y !== 0) {
-      this.x += dir.x * this.speed * dt;
-      this.y += dir.y * this.speed * dt;
-    }
-
-    // 触摸拖拽：平滑跟随目标位置
-    if (input.touchTarget) {
-      const target = input.touchTarget;
-      const lerp = 1 - Math.pow(0.001, dt);
-      this.x += (target.x - this.x) * lerp;
-      this.y += (target.y - this.y) * lerp;
-    }
-
-    this.x = Math.max(PLAYER_MARGIN, Math.min(GAME_WIDTH - PLAYER_MARGIN, this.x));
-    this.y = Math.max(GAME_HEIGHT * 0.4, Math.min(GAME_HEIGHT - PLAYER_MARGIN, this.y));
-
-    if (this.invincibleTimer > 0) {
-      this.invincibleTimer -= dt;
-    }
+    this.applyMovement(dt, input, GAME_HEIGHT * 0.4);
+    this.tickTimers(dt);
     this.attackTimer += dt;
+    for (const drone of this.drones) drone.update(dt, this);
   }
 
-  /** 升级暂停期间移动：Y 边界扩展到全屏，便于飞向上方选项框 */
   updateLevelUp(dt: number, input: Input): void {
-    const dir = input.getMoveDirection();
-    if (dir.x !== 0 || dir.y !== 0) {
-      this.x += dir.x * this.speed * dt;
-      this.y += dir.y * this.speed * dt;
-    }
+    this.applyMovement(dt, input, PLAYER_MARGIN);
+    // 暂停选奖励期间不推进无敌/护盾等战斗计时，避免选完立刻可受伤
+  }
 
-    if (input.touchTarget) {
-      const target = input.touchTarget;
-      const lerp = 1 - Math.pow(0.001, dt);
-      this.x += (target.x - this.x) * lerp;
-      this.y += (target.y - this.y) * lerp;
-    }
+  private tickTimers(dt: number): void {
+    if (this.invincibleTimer > 0) this.invincibleTimer -= dt;
+    if (this.shieldActiveTimer > 0) this.shieldActiveTimer -= dt;
+    if (this.shieldCooldownTimer > 0) this.shieldCooldownTimer -= dt;
+    if (this.vampCooldownTimer > 0) this.vampCooldownTimer -= dt;
+    this.tickEasyModeRegen(dt);
+  }
 
-    this.x = Math.max(PLAYER_MARGIN, Math.min(GAME_WIDTH - PLAYER_MARGIN, this.x));
-    this.y = Math.max(PLAYER_MARGIN, Math.min(GAME_HEIGHT - PLAYER_MARGIN, this.y));
+  /** 简单模式：定时恢复生命 */
+  private tickEasyModeRegen(dt: number): void {
+    if (this.mode !== 'easy' || this.hp >= this.maxHp) return;
+
+    this.regenTimer += dt;
+    while (this.regenTimer >= EASY_MODE_REGEN_INTERVAL && this.hp < this.maxHp) {
+      this.regenTimer -= EASY_MODE_REGEN_INTERVAL;
+      this.hp = Math.min(
+        this.maxHp,
+        this.hp + this.scaleHealAmount(EASY_MODE_REGEN_AMOUNT),
+      );
+    }
+  }
+
+  /** 加固舰体：缩放生命上限增益 */
+  scaleHpGain(base: number): number {
+    return Math.max(1, Math.round(base * this.hpGainMultiplier));
+  }
+
+  /** 加固舰体：缩放生命恢复量 */
+  scaleHealAmount(base: number): number {
+    return Math.max(1, Math.round(base * this.hpGainMultiplier));
   }
 
   takeDamage(amount: number): boolean {
-    if (this.invincibleTimer > 0) return false;
+    if (this.invincibleTimer > 0 || this.isShieldActive) return false;
+
+    // 被动护盾：冷却完毕时受击自动开盾并格挡本次伤害
+    if (this.hasRelic('passiveShield') && this.shieldCooldownTimer <= 0 && this.shieldActiveTimer <= 0) {
+      this.tryActivateShield();
+      return false;
+    }
+
+    // 回收引擎：概率免伤
+    if (this.hasRelic('salvageBoost') && Math.random() < RELIC_DODGE_CHANCE) {
+      return false;
+    }
+
     this.hp -= amount;
     this.invincibleTimer = INVINCIBLE_DURATION;
     return true;
+  }
+
+  /** 击杀回血宝物 */
+  onEnemyKilled(): void {
+    if (!this.hasRelic('vampiricRounds') || this.vampCooldownTimer > 0) return;
+    this.hp = Math.min(this.maxHp, this.hp + this.scaleHealAmount(1));
+    this.vampCooldownTimer = RELIC_VAMP_COOLDOWN;
+  }
+
+  /** 动能吸收：护盾格挡敌弹时回复 1 点生命 */
+  onShieldBlockBullet(): void {
+    if (!this.hasRelic('kineticAbsorption')) return;
+    this.hp = Math.min(this.maxHp, this.hp + 1);
+  }
+
+  /** 动能转化：命中敌机时累计，每 8 次减少主动护盾冷却 1 秒 */
+  onEnemyHit(): void {
+    if (!this.hasRelic('kineticConversion')) return;
+    this.kineticHitCounter += 1;
+    if (this.kineticHitCounter < RELIC_KINETIC_HITS_PER_PROC) return;
+
+    const procs = Math.floor(this.kineticHitCounter / RELIC_KINETIC_HITS_PER_PROC);
+    this.kineticHitCounter %= RELIC_KINETIC_HITS_PER_PROC;
+    this.shieldCooldownTimer = Math.max(
+      0,
+      this.shieldCooldownTimer - procs * RELIC_KINETIC_SHIELD_CD_REDUCTION,
+    );
   }
 
   canFire(): boolean {
@@ -109,21 +251,22 @@ export class Player {
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
+    for (const drone of this.drones) drone.draw(ctx, this);
+
+    if (this.isShieldActive) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.hitRadius + 10, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(96, 165, 250, 0.8)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(96, 165, 250, 0.15)';
+      ctx.fill();
+    }
+
     const blink = this.invincibleTimer > 0 && Math.floor(this.invincibleTimer * 10) % 2 === 0;
     if (blink) ctx.globalAlpha = 0.4;
 
-    // 蓝色向上三角形
-    ctx.beginPath();
-    ctx.moveTo(this.x, this.y - this.hitRadius);
-    ctx.lineTo(this.x - this.hitRadius, this.y + this.hitRadius * 0.8);
-    ctx.lineTo(this.x + this.hitRadius, this.y + this.hitRadius * 0.8);
-    ctx.closePath();
-
-    const grad = ctx.createLinearGradient(this.x, this.y - this.hitRadius, this.x, this.y + this.hitRadius);
-    grad.addColorStop(0, '#60a5fa');
-    grad.addColorStop(1, '#3b82f6');
-    ctx.fillStyle = grad;
-    ctx.fill();
+    drawPlayerShip(ctx, this.x, this.y, this.hitRadius);
 
     ctx.globalAlpha = 1;
   }

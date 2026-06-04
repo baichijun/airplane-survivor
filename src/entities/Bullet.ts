@@ -1,17 +1,19 @@
 import type { BulletOwner, BulletShape } from '../types';
+import type { Enemy } from './Enemy';
 import {
   BULLET_DOT_RADIUS,
+  BULLET_HOMING_STRENGTH,
   BULLET_LONG_LENGTH,
   GAME_HEIGHT,
   GAME_WIDTH,
   LASER_ACTIVE_DURATION,
   LASER_BEAM_WIDTH,
-  LASER_WARNING_COUNT,
-  LASER_WARNING_FLASH,
-  LASER_WARNING_GAP,
+  LASER_GAP_DURATION,
+  LASER_MAX_TRACE_LENGTH,
+  LASER_WARNING_DURATION,
 } from '../config/balance';
 
-export type LaserPhase = 'warning' | 'active' | 'done';
+export type LaserPhase = 'warning' | 'gap' | 'active' | 'done';
 
 /** 子弹实体 */
 export class Bullet {
@@ -25,18 +27,22 @@ export class Bullet {
   owner: BulletOwner;
   shape: BulletShape = 'dot';
 
-  /** 长弹半长（沿飞行方向） */
   halfLength = 0;
 
-  /** 激光阶段与线段端点 */
   phase: LaserPhase = 'done';
   lineX1 = 0;
   lineY1 = 0;
   lineX2 = 0;
   lineY2 = 0;
   phaseTimer = 0;
-  warningFlashIndex = 0;
   laserHitApplied = false;
+
+  homing = false;
+  isDroneBullet = false;
+  homingStrength = BULLET_HOMING_STRENGTH;
+
+  /** 已造成伤害的敌机（弹射时避免重复命中同一目标） */
+  readonly hitEnemies = new Set<Enemy>();
 
   constructor(
     x: number,
@@ -60,12 +66,10 @@ export class Bullet {
     }
   }
 
-  /** 初始化激光预瞄线（从起点沿方向延伸至画布边缘） */
   initLaserLine(startX: number, startY: number, dirX: number, dirY: number): void {
     this.shape = 'laser';
     this.phase = 'warning';
     this.phaseTimer = 0;
-    this.warningFlashIndex = 0;
     this.laserHitApplied = false;
     this.x = startX;
     this.y = startY;
@@ -77,24 +81,27 @@ export class Bullet {
     this.lineX1 = startX;
     this.lineY1 = startY;
 
-    // 延伸至画布边界
     let t = Infinity;
     if (nx > 0) t = Math.min(t, (GAME_WIDTH - startX) / nx);
     else if (nx < 0) t = Math.min(t, -startX / nx);
     if (ny > 0) t = Math.min(t, (GAME_HEIGHT - startY) / ny);
     else if (ny < 0) t = Math.min(t, -startY / ny);
-    if (!Number.isFinite(t) || t <= 0) t = 500;
+    if (!Number.isFinite(t) || t <= 0) t = LASER_MAX_TRACE_LENGTH;
 
     this.lineX2 = startX + nx * t;
     this.lineY2 = startY + ny * t;
   }
 
-  update(dt: number, gameWidth: number, gameHeight: number): void {
+  update(dt: number, gameWidth: number, gameHeight: number, homingTargets?: { x: number; y: number }[]): void {
     if (!this.active) return;
 
     if (this.shape === 'laser') {
       this.updateLaser(dt);
       return;
+    }
+
+    if (this.homing && homingTargets && homingTargets.length > 0) {
+      this.applyHoming(dt, homingTargets);
     }
 
     this.x += this.vx * dt;
@@ -109,21 +116,65 @@ export class Bullet {
     }
   }
 
-  private updateLaser(dt: number): void {
-    if (this.phase === 'warning') {
-      this.phaseTimer += dt;
-      const cycleDuration = LASER_WARNING_FLASH + LASER_WARNING_GAP;
-      const totalWarning = LASER_WARNING_COUNT * cycleDuration - LASER_WARNING_GAP;
+  private applyHoming(dt: number, targets: { x: number; y: number }[]): void {
+    let nearest: { x: number; y: number } | null = null;
+    let minDist = Infinity;
 
-      if (this.phaseTimer >= totalWarning) {
-        this.phase = 'active';
+    for (const t of targets) {
+      if (t.y > this.y + 30) continue;
+      const d = (t.x - this.x) ** 2 + (t.y - this.y) ** 2;
+      if (d < minDist) {
+        minDist = d;
+        nearest = t;
+      }
+    }
+
+    if (!nearest) {
+      for (const t of targets) {
+        const d = (t.x - this.x) ** 2 + (t.y - this.y) ** 2;
+        if (d < minDist) {
+          minDist = d;
+          nearest = t;
+        }
+      }
+    }
+
+    if (!nearest) return;
+
+    const speed = Math.hypot(this.vx, this.vy) || 1;
+    const desiredAngle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
+    const currentAngle = Math.atan2(this.vy, this.vx);
+    let diff = desiredAngle - currentAngle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const turn = Math.sign(diff) * Math.min(Math.abs(diff), this.homingStrength * dt);
+    const newAngle = currentAngle + turn;
+    this.vx = Math.cos(newAngle) * speed;
+    this.vy = Math.sin(newAngle) * speed;
+  }
+
+  /** 激光时序：预瞄 0.3s → 间隔 0.3s → 攻击 0.3s */
+  private updateLaser(dt: number): void {
+    this.phaseTimer += dt;
+
+    if (this.phase === 'warning') {
+      if (this.phaseTimer >= LASER_WARNING_DURATION) {
+        this.phase = 'gap';
         this.phaseTimer = 0;
       }
       return;
     }
 
+    if (this.phase === 'gap') {
+      if (this.phaseTimer >= LASER_GAP_DURATION) {
+        this.phase = 'active';
+        this.phaseTimer = 0;
+        this.laserHitApplied = false;
+      }
+      return;
+    }
+
     if (this.phase === 'active') {
-      this.phaseTimer += dt;
       if (this.phaseTimer >= LASER_ACTIVE_DURATION) {
         this.phase = 'done';
         this.active = false;
@@ -131,21 +182,18 @@ export class Bullet {
     }
   }
 
-  /** 激光预瞄线当前是否可见（闪烁中） */
   isLaserWarningVisible(): boolean {
-    if (this.phase !== 'warning') return false;
-    const cycleDuration = LASER_WARNING_FLASH + LASER_WARNING_GAP;
-    const cycleTime = this.phaseTimer % cycleDuration;
-    const flashIndex = Math.floor(this.phaseTimer / cycleDuration);
-    return flashIndex < LASER_WARNING_COUNT && cycleTime < LASER_WARNING_FLASH;
+    return this.shape === 'laser' && this.phase === 'warning';
   }
 
-  /** 激光是否处于攻击阶段 */
+  isLaserGapVisible(): boolean {
+    return this.shape === 'laser' && this.phase === 'gap';
+  }
+
   isLaserActive(): boolean {
     return this.shape === 'laser' && this.phase === 'active';
   }
 
-  /** 获取长弹线段端点（沿飞行方向） */
   getLongSegment(): { x1: number; y1: number; x2: number; y2: number } {
     const len = Math.hypot(this.vx, this.vy) || 1;
     const nx = this.vx / len;
@@ -173,7 +221,15 @@ export class Bullet {
 
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fillStyle = this.owner === 'player' ? '#ffd93d' : '#a855f7';
+    if (this.owner === 'player') {
+      if (this.isDroneBullet) {
+        ctx.fillStyle = '#67e8f9';
+      } else {
+        ctx.fillStyle = '#ffd93d';
+      }
+    } else {
+      ctx.fillStyle = '#a855f7';
+    }
     ctx.fill();
   }
 
@@ -189,10 +245,10 @@ export class Bullet {
   }
 
   private drawLaser(ctx: CanvasRenderingContext2D): void {
-    if (this.phase === 'warning' && this.isLaserWarningVisible()) {
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+    if (this.isLaserWarningVisible()) {
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
       ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
+      ctx.setLineDash([8, 4]);
       ctx.beginPath();
       ctx.moveTo(this.lineX1, this.lineY1);
       ctx.lineTo(this.lineX2, this.lineY2);
@@ -201,8 +257,20 @@ export class Bullet {
       return;
     }
 
-    if (this.phase === 'active') {
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+    if (this.isLaserGapVisible()) {
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.18)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(this.lineX1, this.lineY1);
+      ctx.lineTo(this.lineX2, this.lineY2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      return;
+    }
+
+    if (this.isLaserActive()) {
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
       ctx.lineWidth = LASER_BEAM_WIDTH;
       ctx.lineCap = 'round';
       ctx.beginPath();
@@ -210,7 +278,7 @@ export class Bullet {
       ctx.lineTo(this.lineX2, this.lineY2);
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(this.lineX1, this.lineY1);

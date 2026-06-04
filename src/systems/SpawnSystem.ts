@@ -6,7 +6,7 @@ import {
   SPAWN_INTERVAL_DECAY,
   FIGHTER_UNLOCK_TIME,
   TANK_UNLOCK_TIME,
-  MAX_ENEMIES,
+  ENEMY_CAP_INITIAL,
 } from '../config/balance';
 
 /** 敌机生成系统（随时间加速） */
@@ -19,9 +19,9 @@ export class SpawnSystem {
     this.elapsedSec = 0;
   }
 
-  update(dt: number, enemies: Enemy[]): Enemy | null {
+  update(dt: number, enemies: Enemy[], maxCap = ENEMY_CAP_INITIAL): Enemy | null {
     this.elapsedSec += dt;
-    if (enemies.filter((e) => e.active).length >= MAX_ENEMIES) return null;
+    if (enemies.filter((e) => e.active).length >= maxCap) return null;
 
     this.spawnTimer += dt;
     const interval = this.getSpawnInterval();
@@ -30,7 +30,7 @@ export class SpawnSystem {
     this.spawnTimer -= interval;
     const type = this.pickEnemyType();
     const x = 30 + Math.random() * (GAME_WIDTH - 60);
-    return new Enemy(type, x, -30);
+    return new Enemy(type, x, -30, this.elapsedSec);
   }
 
   private getSpawnInterval(): number {

@@ -1,4 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config/balance';
+import type { GameMode } from '../types';
 
 /** 游戏结束界面 */
 export class GameOverOverlay {
@@ -52,7 +53,8 @@ export class GameOverOverlay {
 
 /** 开始菜单 */
 export class MenuOverlay {
-  private btnRect = { x: 0, y: 0, w: 180, h: 48 };
+  private normalBtn = { x: 0, y: 0, w: 180, h: 44 };
+  private easyBtn = { x: 0, y: 0, w: 180, h: 44 };
 
   draw(ctx: CanvasRenderingContext2D): void {
     // 星空背景点缀
@@ -72,34 +74,63 @@ export class MenuOverlay {
     titleGrad.addColorStop(1, '#a855f7');
     ctx.fillStyle = titleGrad;
     ctx.font = 'bold 32px sans-serif';
-    ctx.fillText('飞机大战', GAME_WIDTH / 2, 140);
+    ctx.fillText('飞机大战', GAME_WIDTH / 2, 130);
     ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('幸存者', GAME_WIDTH / 2, 175);
+    ctx.fillText('幸存者', GAME_WIDTH / 2, 162);
 
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '13px sans-serif';
-    ctx.fillText('WASD / 方向键移动 · 触摸拖拽', GAME_WIDTH / 2, 220);
-    ctx.fillText('自动射击 · 升级选奖励', GAME_WIDTH / 2, 240);
+    ctx.fillText('WASD / 方向键 / 虚拟摇杆移动', GAME_WIDTH / 2, 210);
+    ctx.fillText('空格 / 护盾按钮 · 自动射击', GAME_WIDTH / 2, 230);
 
-    const bx = GAME_WIDTH / 2 - 90;
-    const by = 320;
-    this.btnRect = { x: bx, y: by, w: 180, h: 48 };
+    this.drawModeButton(ctx, GAME_WIDTH / 2 - 90, 280, '标准模式', '#3b82f6', '#a855f7', this.normalBtn);
+    this.drawModeButton(ctx, GAME_WIDTH / 2 - 90, 336, '简单模式', '#22c55e', '#14b8a6', this.easyBtn);
 
-    const grad = ctx.createLinearGradient(bx, by, bx, by + 48);
-    grad.addColorStop(0, '#3b82f6');
-    grad.addColorStop(1, '#a855f7');
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('简单模式：初始生命 ×3，每 5 秒恢复 1 点生命', GAME_WIDTH / 2, 400);
+  }
+
+  private drawModeButton(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    label: string,
+    colorStart: string,
+    colorEnd: string,
+    rect: { x: number; y: number; w: number; h: number },
+  ): void {
+    rect.x = x;
+    rect.y = y;
+    rect.w = 180;
+    rect.h = 44;
+
+    const grad = ctx.createLinearGradient(x, y, x, y + 44);
+    grad.addColorStop(0, colorStart);
+    grad.addColorStop(1, colorEnd);
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.roundRect(bx, by, 180, 48, 10);
+    ctx.roundRect(x, y, 180, 44, 10);
     ctx.fill();
 
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillText('开始游戏', GAME_WIDTH / 2, by + 31);
+    ctx.font = 'bold 17px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + 90, y + 22);
   }
 
-  hitTest(x: number, y: number): boolean {
-    const b = this.btnRect;
-    return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+  hitTest(x: number, y: number): GameMode | null {
+    if (this.hitRect(x, y, this.normalBtn)) return 'normal';
+    if (this.hitRect(x, y, this.easyBtn)) return 'easy';
+    return null;
+  }
+
+  private hitRect(
+    x: number,
+    y: number,
+    rect: { x: number; y: number; w: number; h: number },
+  ): boolean {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
   }
 }

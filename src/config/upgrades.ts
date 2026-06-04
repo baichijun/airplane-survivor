@@ -1,7 +1,12 @@
 import type { UpgradeDef, UpgradeId } from '../types';
 import type { Player } from '../entities/Player';
+import {
+  UPGRADE_ATTACK_SPEED_MULT,
+  UPGRADE_DRONE_ATTACK_SPEED_MULT,
+  UPGRADE_DRONE_DAMAGE_MULT,
+} from './balance';
 
-/** 奖励池 */
+/** 升级奖励池（升级界面随机抽取） */
 export const UPGRADE_POOL: UpgradeDef[] = [
   {
     id: 'attackSpeed',
@@ -26,12 +31,17 @@ export const UPGRADE_POOL: UpgradeDef[] = [
   {
     id: 'maxHp',
     name: '装甲强化',
-    description: '最大生命值 +1，恢复 1 点生命',
+    description: '最大生命提升至 1.2 倍；恢复 30% 最大生命',
   },
   {
-    id: 'bulletSpeed',
-    name: '穿甲弹',
-    description: '子弹速度 +20%',
+    id: 'droneDamage',
+    name: '无人机火力',
+    description: '无人机伤害 +50%',
+  },
+  {
+    id: 'droneAttackSpeed',
+    name: '无人机速射',
+    description: '无人机攻速 +30%',
   },
 ];
 
@@ -50,7 +60,7 @@ export function pickRandomUpgrades(count: number): UpgradeDef[] {
 export function applyUpgrade(player: Player, id: UpgradeId): void {
   switch (id) {
     case 'attackSpeed':
-      player.attackSpeed *= 0.85;
+      player.attackSpeed /= UPGRADE_ATTACK_SPEED_MULT;
       break;
     case 'bulletDamage':
       player.bulletDamage += 1;
@@ -61,12 +71,17 @@ export function applyUpgrade(player: Player, id: UpgradeId): void {
     case 'moveSpeed':
       player.speed *= 1.1;
       break;
-    case 'maxHp':
-      player.maxHp += 1;
-      player.hp = Math.min(player.hp + 1, player.maxHp);
+    case 'maxHp': {
+      player.maxHp = Math.round(player.maxHp * 1.2);
+      const heal = Math.round(player.maxHp * 0.3);
+      player.hp = Math.min(player.maxHp, player.hp + heal);
       break;
-    case 'bulletSpeed':
-      player.bulletSpeed *= 1.2;
+    }
+    case 'droneDamage':
+      player.droneDamageMult *= UPGRADE_DRONE_DAMAGE_MULT;
+      break;
+    case 'droneAttackSpeed':
+      player.droneAttackSpeedMult *= UPGRADE_DRONE_ATTACK_SPEED_MULT;
       break;
   }
 }

@@ -21,8 +21,8 @@ export class ExpSystem {
   }
 
   /** 被动经验每帧结算 */
-  tickPassive(dt: number): void {
-    this.passiveAccumulator += PASSIVE_XP_PER_SEC * dt;
+  tickPassive(dt: number, multiplier = 1): void {
+    this.passiveAccumulator += PASSIVE_XP_PER_SEC * multiplier * dt;
     const whole = Math.floor(this.passiveAccumulator);
     if (whole > 0) {
       this.currentXp += whole;
