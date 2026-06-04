@@ -1,6 +1,6 @@
 import type { ExpSystem } from '../systems/ExpSystem';
 import type { Player } from '../entities/Player';
-import { GAME_WIDTH } from '../config/balance';
+import { GAME_WIDTH, GAME_HEIGHT } from '../config/balance';
 
 /** 抬头显示：生命值、等级、经验条 */
 export class HUD {
@@ -12,6 +12,9 @@ export class HUD {
     kills: number,
   ): void {
     const pad = 12;
+    const barW = 160;
+    const barH = 10;
+    const bottomY = GAME_HEIGHT - pad - barH;
 
     // 存活时间与击杀
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
@@ -31,15 +34,18 @@ export class HUD {
     ctx.font = 'bold 14px sans-serif';
     ctx.fillText(`等级 ${exp.level}`, GAME_WIDTH - pad, pad + 12);
 
-    // 生命值条
-    const barY = 28;
-    const barW = GAME_WIDTH - pad * 2;
-    const barH = 10;
-    this.drawBar(ctx, pad, barY, barW, barH, player.hp / player.maxHp, '#ef4444', '#374151');
+    // 左下角：生命值条 + 数值
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '11px sans-serif';
+    ctx.fillText(`${player.hp}/${player.maxHp}`, pad, bottomY - 4);
+    this.drawBar(ctx, pad, bottomY, barW, barH, player.hp / player.maxHp, '#ef4444', '#374151');
 
-    // 经验条
-    const xpY = barY + 16;
-    this.drawBar(ctx, pad, xpY, barW, 6, exp.xpProgress, '#a855f7', '#374151');
+    // 右下角：经验条 + 数值
+    const xpX = GAME_WIDTH - pad - barW;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${exp.currentXp}/${exp.xpRequired}`, GAME_WIDTH - pad, bottomY - 4);
+    this.drawBar(ctx, xpX, bottomY, barW, barH, exp.xpProgress, '#a855f7', '#374151');
   }
 
   private drawBar(

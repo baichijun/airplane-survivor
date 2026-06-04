@@ -74,6 +74,25 @@ export class Player {
     this.attackTimer += dt;
   }
 
+  /** 升级暂停期间移动：Y 边界扩展到全屏，便于飞向上方选项框 */
+  updateLevelUp(dt: number, input: Input): void {
+    const dir = input.getMoveDirection();
+    if (dir.x !== 0 || dir.y !== 0) {
+      this.x += dir.x * this.speed * dt;
+      this.y += dir.y * this.speed * dt;
+    }
+
+    if (input.touchTarget) {
+      const target = input.touchTarget;
+      const lerp = 1 - Math.pow(0.001, dt);
+      this.x += (target.x - this.x) * lerp;
+      this.y += (target.y - this.y) * lerp;
+    }
+
+    this.x = Math.max(PLAYER_MARGIN, Math.min(GAME_WIDTH - PLAYER_MARGIN, this.x));
+    this.y = Math.max(PLAYER_MARGIN, Math.min(GAME_HEIGHT - PLAYER_MARGIN, this.y));
+  }
+
   takeDamage(amount: number): boolean {
     if (this.invincibleTimer > 0) return false;
     this.hp -= amount;

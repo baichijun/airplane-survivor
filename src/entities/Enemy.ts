@@ -1,4 +1,4 @@
-import type { EnemyConfig, EnemyType } from '../types';
+import type { EnemyConfig, EnemyType, BulletAimType, BulletShape } from '../types';
 import { ENEMY_CONFIGS } from '../config/balance';
 
 /** 敌机实体 */
@@ -12,6 +12,8 @@ export class Enemy {
   speed: number;
   attackSpeed: number;
   bulletDamage: number;
+  aimType: BulletAimType;
+  bulletShape: BulletShape;
   hitRadius: number;
   xpReward: number;
   width: number;
@@ -32,6 +34,8 @@ export class Enemy {
     this.speed = cfg.speed;
     this.attackSpeed = cfg.attackSpeed;
     this.bulletDamage = cfg.bulletDamage;
+    this.aimType = cfg.aimType;
+    this.bulletShape = cfg.bulletShape;
     this.hitRadius = cfg.hitRadius;
     this.xpReward = cfg.xpReward;
     this.width = cfg.width;

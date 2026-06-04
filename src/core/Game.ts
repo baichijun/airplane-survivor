@@ -13,6 +13,7 @@ import { LevelUpOverlay } from '../ui/LevelUpOverlay';
 import { GameOverOverlay, MenuOverlay } from '../ui/GameOverOverlay';
 import { applyUpgrade, pickRandomUpgrades } from '../config/upgrades';
 import { GAME_HEIGHT } from '../config/balance';
+import type { UpgradeDef } from '../types';
 
 /** 游戏主控制器：状态机 + 主循环 */
 export class Game {
@@ -71,14 +72,17 @@ export class Game {
     if (this.state === GameState.PAUSED) {
       const chosen = this.levelUpOverlay.hitTest(ptr.x, ptr.y);
       if (chosen) {
-        applyUpgrade(this.player, chosen.id);
-        this.levelUpOverlay.hide();
-        this.state = GameState.PLAYING;
-        // 连续升级
-        if (this.exp.shouldLevelUp()) {
-          this.triggerLevelUp();
-        }
+        this.confirmUpgrade(chosen);
       }
+    }
+  }
+
+  private confirmUpgrade(chosen: UpgradeDef): void {
+    applyUpgrade(this.player, chosen.id);
+    this.levelUpOverlay.hide();
+    this.state = GameState.PLAYING;
+    if (this.exp.shouldLevelUp()) {
+      this.triggerLevelUp();
     }
   }
 
@@ -101,6 +105,17 @@ export class Game {
   private update(dt: number): void {
     if (this.state === GameState.PLAYING) {
       this.updatePlaying(dt);
+    } else if (this.state === GameState.PAUSED) {
+      this.updateLevelUp(dt);
+    }
+  }
+
+  private updateLevelUp(dt: number): void {
+    this.player.updateLevelUp(dt, this.input);
+
+    const chosen = this.levelUpOverlay.updateSelection(this.player.x, this.player.y, dt);
+    if (chosen) {
+      this.confirmUpgrade(chosen);
     }
   }
 
@@ -170,12 +185,15 @@ export class Game {
     // 游戏实体
     for (const enemy of this.enemies) enemy.draw(ctx);
     for (const b of this.bullets) b.draw(ctx);
-    this.player.draw(ctx);
+    if (this.state !== GameState.PAUSED) {
+      this.player.draw(ctx);
+    }
 
     this.hud.draw(ctx, this.player, this.exp, this.spawn.elapsedSec, this.kills);
 
     if (this.state === GameState.PAUSED) {
       this.levelUpOverlay.draw(ctx);
+      this.player.draw(ctx);
     }
 
     if (this.state === GameState.GAME_OVER) {

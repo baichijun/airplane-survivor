@@ -1,7 +1,7 @@
 import type { Bullet } from '../entities/Bullet';
 import type { Enemy } from '../entities/Enemy';
 import type { Player } from '../entities/Player';
-import { CONTACT_DAMAGE } from '../config/balance';
+import { CONTACT_DAMAGE, LASER_BEAM_WIDTH } from '../config/balance';
 
 /** 圆形碰撞检测 */
 function circleOverlap(
@@ -37,6 +37,34 @@ function rectCircleOverlap(
   return dx * dx + dy * dy <= cr * cr;
 }
 
+/** 线段与圆碰撞 */
+function segmentCircleOverlap(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cx: number,
+  cy: number,
+  cr: number,
+  lineWidth = 0,
+): boolean {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) {
+    return circleOverlap(x1, y1, lineWidth / 2, cx, cy, cr);
+  }
+
+  let t = ((cx - x1) * dx + (cy - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const nearestX = x1 + t * dx;
+  const nearestY = y1 + t * dy;
+  const effectiveR = cr + lineWidth / 2;
+  const distX = cx - nearestX;
+  const distY = cy - nearestY;
+  return distX * distX + distY * distY <= effectiveR * effectiveR;
+}
+
 export interface CollisionResult {
   killedEnemies: Enemy[];
   playerHit: boolean;
@@ -58,36 +86,19 @@ export class CollisionSystem {
       if (bullet.owner === 'player') {
         for (const enemy of enemies) {
           if (!enemy.active) continue;
-          if (
-            rectCircleOverlap(
-              enemy.x,
-              enemy.y,
-              enemy.width,
-              enemy.height,
-              bullet.x,
-              bullet.y,
-              bullet.radius,
-            )
-          ) {
+          if (this.playerBulletHitsEnemy(bullet, enemy)) {
             enemy.takeDamage(bullet.damage);
             bullet.active = false;
             if (!enemy.active) killedEnemies.push(enemy);
             break;
           }
         }
-      } else {
-        if (
-          circleOverlap(
-            bullet.x,
-            bullet.y,
-            bullet.radius,
-            player.x,
-            player.y,
-            player.hitRadius,
-          )
-        ) {
-          if (player.takeDamage(bullet.damage)) playerHit = true;
+      } else if (this.enemyBulletHitsPlayer(bullet, player)) {
+        if (player.takeDamage(bullet.damage)) playerHit = true;
+        if (bullet.shape !== 'laser') {
           bullet.active = false;
+        } else if (bullet.isLaserActive()) {
+          bullet.laserHitApplied = true;
         }
       }
     }
@@ -113,5 +124,70 @@ export class CollisionSystem {
     }
 
     return { killedEnemies, playerHit };
+  }
+
+  private playerBulletHitsEnemy(bullet: Bullet, enemy: Enemy): boolean {
+    if (bullet.shape === 'long') {
+      const seg = bullet.getLongSegment();
+      return segmentCircleOverlap(
+        seg.x1,
+        seg.y1,
+        seg.x2,
+        seg.y2,
+        enemy.x,
+        enemy.y,
+        Math.max(enemy.width, enemy.height) / 2,
+        bullet.radius * 2,
+      );
+    }
+
+    return rectCircleOverlap(
+      enemy.x,
+      enemy.y,
+      enemy.width,
+      enemy.height,
+      bullet.x,
+      bullet.y,
+      bullet.radius,
+    );
+  }
+
+  private enemyBulletHitsPlayer(bullet: Bullet, player: Player): boolean {
+    if (bullet.shape === 'laser') {
+      if (!bullet.isLaserActive() || bullet.laserHitApplied) return false;
+      return segmentCircleOverlap(
+        bullet.lineX1,
+        bullet.lineY1,
+        bullet.lineX2,
+        bullet.lineY2,
+        player.x,
+        player.y,
+        player.hitRadius,
+        LASER_BEAM_WIDTH,
+      );
+    }
+
+    if (bullet.shape === 'long') {
+      const seg = bullet.getLongSegment();
+      return segmentCircleOverlap(
+        seg.x1,
+        seg.y1,
+        seg.x2,
+        seg.y2,
+        player.x,
+        player.y,
+        player.hitRadius,
+        bullet.radius * 2,
+      );
+    }
+
+    return circleOverlap(
+      bullet.x,
+      bullet.y,
+      bullet.radius,
+      player.x,
+      player.y,
+      player.hitRadius,
+    );
   }
 }

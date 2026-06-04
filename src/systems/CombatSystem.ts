@@ -4,6 +4,7 @@ import type { Player } from '../entities/Player';
 
 const BULLET_SPREAD = 15 * (Math.PI / 180);
 const ENEMY_BULLET_SPEED = 250;
+const AIM_SPREAD_DEG = 10 * (Math.PI / 180);
 
 /** 战斗系统：自动射击 */
 export class CombatSystem {
@@ -52,19 +53,52 @@ export class CombatSystem {
     if (!enemy.canFire()) return null;
     enemy.resetFireTimer();
 
-    const dx = enemy.targetX - enemy.x;
-    const dy = enemy.targetY - enemy.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const vx = (dx / len) * ENEMY_BULLET_SPEED;
-    const vy = (dy / len) * ENEMY_BULLET_SPEED;
+    const startX = enemy.x;
+    const startY = enemy.y + enemy.height / 2;
+    const { vx, vy, dirX, dirY } = this.computeEnemyVelocity(enemy);
+
+    if (enemy.bulletShape === 'laser') {
+      const laser = new Bullet(startX, startY, 0, 0, enemy.bulletDamage, 'enemy', 'laser');
+      laser.initLaserLine(startX, startY, dirX, dirY);
+      return laser;
+    }
 
     return new Bullet(
-      enemy.x,
-      enemy.y + enemy.height / 2,
+      startX,
+      startY,
       vx,
       vy,
       enemy.bulletDamage,
       'enemy',
+      enemy.bulletShape,
     );
+  }
+
+  private computeEnemyVelocity(enemy: Enemy): {
+    vx: number;
+    vy: number;
+    dirX: number;
+    dirY: number;
+  } {
+    if (enemy.aimType === 'vertical') {
+      return { vx: 0, vy: ENEMY_BULLET_SPEED, dirX: 0, dirY: 1 };
+    }
+
+    const dx = enemy.targetX - enemy.x;
+    const dy = enemy.targetY - enemy.y;
+    let angle = Math.atan2(dy, dx);
+
+    if (enemy.aimType === 'spread') {
+      angle += (Math.random() * 2 - 1) * AIM_SPREAD_DEG;
+    }
+
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    return {
+      vx: dirX * ENEMY_BULLET_SPEED,
+      vy: dirY * ENEMY_BULLET_SPEED,
+      dirX,
+      dirY,
+    };
   }
 }

@@ -43,6 +43,8 @@ export const ENEMY_CONFIGS: Record<EnemyType, EnemyConfig> = {
     speed: 80,
     attackSpeed: 1.2,
     bulletDamage: 1,
+    aimType: 'direct',
+    bulletShape: 'dot',
     xpReward: 5,
     hitRadius: 12,
     width: 24,
@@ -55,6 +57,8 @@ export const ENEMY_CONFIGS: Record<EnemyType, EnemyConfig> = {
     speed: 60,
     attackSpeed: 0.8,
     bulletDamage: 2,
+    aimType: 'spread',
+    bulletShape: 'long',
     xpReward: 12,
     hitRadius: 16,
     width: 32,
@@ -67,6 +71,8 @@ export const ENEMY_CONFIGS: Record<EnemyType, EnemyConfig> = {
     speed: 40,
     attackSpeed: 1.5,
     bulletDamage: 3,
+    aimType: 'vertical',
+    bulletShape: 'laser',
     xpReward: 25,
     hitRadius: 22,
     width: 44,
@@ -86,3 +92,27 @@ export const FIGHTER_UNLOCK_TIME = 30;
 
 /** 解锁重甲机（tank）的游戏时间（秒） */
 export const TANK_UNLOCK_TIME = 60;
+
+/** 升级选项框内停留选中的时长（秒） */
+export const LEVEL_UP_SELECT_DWELL = 0.5;
+
+/** 圆点子弹半径 */
+export const BULLET_DOT_RADIUS = 4;
+
+/** 长弹长度（5 倍圆点直径） */
+export const BULLET_LONG_LENGTH = 40;
+
+/** 激光预瞄单次闪烁时长（秒） */
+export const LASER_WARNING_FLASH = 0.2;
+
+/** 激光预瞄闪烁次数 */
+export const LASER_WARNING_COUNT = 2;
+
+/** 激光攻击持续时间（秒） */
+export const LASER_ACTIVE_DURATION = 0.5;
+
+/** 激光光束宽度 */
+export const LASER_BEAM_WIDTH = 8;
+
+/** 激光预瞄闪烁间隔（秒） */
+export const LASER_WARNING_GAP = 0.1;
