@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-/** GitHub Pages 项目站点需设置 base 为仓库名 */
+/** 自定义域名用 '/'；若走 github.io/仓库名/ 路径则设为 '/airplane-survivor/' */
 export default defineConfig({
-  base: '/airplane-survivor/',
+  base: process.env.VITE_BASE ?? '/',
 });
