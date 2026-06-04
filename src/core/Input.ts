@@ -1,5 +1,5 @@
 import type { Engine } from './Engine';
-import { JOYSTICK_DIAGONAL_SPEED_MULT } from '../config/balance';
+import { JOYSTICK_ACTIVATION_THRESHOLD, JOYSTICK_DIAGONAL_SPEED_MULT } from '../config/balance';
 
 /** 键盘 + 触摸输入 */
 export class Input {
@@ -93,10 +93,16 @@ export class Input {
   /**
    * 虚拟摇杆：吸附到 8 方向；斜向速度为直行的 JOYSTICK_DIAGONAL_SPEED_MULT。
    */
+  /** 摇杆是否已推过激活阈值（用于暂停界面区分摇杆与屏幕拖拽） */
+  isJoystickActive(): boolean {
+    const { x, y } = this.joystick;
+    return Math.hypot(x, y) >= JOYSTICK_ACTIVATION_THRESHOLD;
+  }
+
   getJoystickDirection(): { x: number; y: number } {
     const { x, y } = this.joystick;
     const len = Math.hypot(x, y);
-    if (len < 0.12) return { x: 0, y: 0 };
+    if (len < JOYSTICK_ACTIVATION_THRESHOLD) return { x: 0, y: 0 };
 
     const angle = Math.atan2(y, x);
     const eighth = Math.round(angle / (Math.PI / 4)) % 8;

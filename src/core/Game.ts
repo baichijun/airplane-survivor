@@ -61,6 +61,8 @@ export class Game {
   private kills = 0;
   private lastTime = 0;
   private wasPointerDown = false;
+  /** 暂停界面：区分点击选卡与持续按住（摇杆/拖拽） */
+  private wasPointerDownPaused = false;
   private pauseKind: PauseKind = 'level_up';
   private upgradePickCounts: UpgradePickCounts = createEmptyPickCounts();
   /** 进入暂停界面时记录的自机位置，恢复战斗时还原 */
@@ -89,6 +91,22 @@ export class Game {
   private handlePointer(): void {
     if (this.state === GameState.PLAYING) return;
 
+    if (this.state === GameState.PAUSED) {
+      const justPressed = this.input.pointerDown && !this.wasPointerDownPaused;
+      this.wasPointerDownPaused = this.input.pointerDown;
+      if (justPressed && this.input.pointer) {
+        const { x, y } = this.input.pointer;
+        if (this.pauseKind === 'level_up') {
+          const chosen = this.levelUpOverlay.hitTest(x, y);
+          if (chosen) this.confirmUpgrade(chosen);
+        } else {
+          const chosen = this.relicOverlay.hitTest(x, y);
+          if (chosen) this.confirmRelic(chosen);
+        }
+      }
+      return;
+    }
+
     const ptr = this.input.consumePointer();
     if (!ptr) return;
 
@@ -101,16 +119,6 @@ export class Game {
     if (this.state === GameState.GAME_OVER && this.gameOverOverlay.hitTest(ptr.x, ptr.y)) {
       this.state = GameState.MENU;
       return;
-    }
-
-    if (this.state === GameState.PAUSED) {
-      if (this.pauseKind === 'level_up') {
-        const chosen = this.levelUpOverlay.hitTest(ptr.x, ptr.y);
-        if (chosen) this.confirmUpgrade(chosen);
-      } else {
-        const chosen = this.relicOverlay.hitTest(ptr.x, ptr.y);
-        if (chosen) this.confirmRelic(chosen);
-      }
     }
   }
 
@@ -181,6 +189,7 @@ export class Game {
 
   private triggerLevelUp(): void {
     this.pauseKind = 'level_up';
+    this.wasPointerDownPaused = this.input.pointerDown;
     this.savePausePosition();
     this.performLevelUp();
     this.levelUpOverlay.show(
@@ -193,6 +202,7 @@ export class Game {
 
   private triggerRelicReward(): void {
     this.pauseKind = 'relic_reward';
+    this.wasPointerDownPaused = this.input.pointerDown;
     this.savePausePosition();
     this.relicOverlay.show(pickRelicRewardOptions(this.player.relics));
     this.state = GameState.PAUSED;
@@ -225,7 +235,11 @@ export class Game {
   }
 
   private updatePaused(dt: number): void {
-    if (this.input.pointerDown && this.input.pointer) {
+    this.mobileControls.updateFromPointer(this.input);
+
+    if (this.input.isJoystickActive()) {
+      this.input.clearTouchTarget();
+    } else if (this.input.pointerDown && this.input.pointer) {
       this.input.setTouchTarget(this.input.pointer.x, this.input.pointer.y);
     } else {
       this.input.clearTouchTarget();
@@ -361,6 +375,7 @@ export class Game {
     }
 
     if (this.state === GameState.PAUSED) {
+      this.mobileControls.draw(ctx, this.player);
       if (this.pauseKind === 'level_up') {
         this.levelUpOverlay.draw(ctx);
       } else {
