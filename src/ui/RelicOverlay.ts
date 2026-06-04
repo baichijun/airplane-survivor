@@ -97,7 +97,7 @@ export class RelicOverlay {
     ctx.fillText('Boss 击破！选择宝物', GAME_WIDTH / 2, 72);
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '12px sans-serif';
-    ctx.fillText('飞入选项框或点击 · 宝物永久生效', GAME_WIDTH / 2, 96);
+    ctx.fillText('操控幻影飞入或点击 · 本体保持原位', GAME_WIDTH / 2, 96);
 
     const dwellProgress = this.getDwellProgress();
     const innerPad = 8;

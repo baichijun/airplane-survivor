@@ -2,6 +2,7 @@ import { GameState } from '../types';
 import { Engine } from './Engine';
 import { Input } from './Input';
 import { Player } from '../entities/Player';
+import { SelectionPhantom } from '../entities/SelectionPhantom';
 import { Bullet } from '../entities/Bullet';
 import type { Enemy } from '../entities/Enemy';
 import { CollisionSystem } from '../systems/CollisionSystem';
@@ -65,9 +66,8 @@ export class Game {
   private wasPointerDownPaused = false;
   private pauseKind: PauseKind = 'level_up';
   private upgradePickCounts: UpgradePickCounts = createEmptyPickCounts();
-  /** 进入暂停界面时记录的自机位置，恢复战斗时还原 */
-  private pausePlayerX = 0;
-  private pausePlayerY = 0;
+  /** 暂停选奖励时操控的幻影（真实自机保持进入暂停时的位置） */
+  private selectionPhantom: SelectionPhantom | null = null;
 
   constructor(canvasId: string) {
     this.engine = new Engine(canvasId);
@@ -151,23 +151,25 @@ export class Game {
     });
   }
 
-  /** 保存进入暂停时的自机位置 */
-  private savePausePosition(): void {
-    this.pausePlayerX = this.player.x;
-    this.pausePlayerY = this.player.y;
-  }
-
-  /** 还原自机到暂停前位置，并清理输入与短暂无敌 */
-  private restorePausePosition(): void {
-    this.player.x = this.pausePlayerX;
-    this.player.y = this.pausePlayerY;
-    this.input.clearTouchTarget();
+  /** 场景切换时清理摇杆，避免残留拖拽导致自机瞬移 */
+  private clearMobileInput(): void {
     this.input.clearJoystick();
+    this.input.setJoystickCaptured(false);
+    this.mobileControls.resetJoystick();
   }
 
-  /** 结束暂停选择：还原位置；若回到战斗则给予短暂无敌 */
+  private spawnSelectionPhantom(): void {
+    this.selectionPhantom = SelectionPhantom.spawnAt(this.player);
+  }
+
+  private destroySelectionPhantom(): void {
+    this.selectionPhantom = null;
+  }
+
+  /** 结束暂停选择；若回到战斗则给予短暂无敌 */
   private finishPauseSelection(onContinue: () => void): void {
-    this.restorePausePosition();
+    this.destroySelectionPhantom();
+    this.clearMobileInput();
     onContinue();
     if (this.state === GameState.PLAYING) {
       this.player.invincibleTimer = Math.max(this.player.invincibleTimer, INVINCIBLE_DURATION);
@@ -190,21 +192,23 @@ export class Game {
   private triggerLevelUp(): void {
     this.pauseKind = 'level_up';
     this.wasPointerDownPaused = this.input.pointerDown;
-    this.savePausePosition();
+    this.clearMobileInput();
     this.performLevelUp();
     this.levelUpOverlay.show(
       pickRandomUpgrades(3),
       this.upgradePickCounts,
       this.player,
     );
+    this.spawnSelectionPhantom();
     this.state = GameState.PAUSED;
   }
 
   private triggerRelicReward(): void {
     this.pauseKind = 'relic_reward';
     this.wasPointerDownPaused = this.input.pointerDown;
-    this.savePausePosition();
+    this.clearMobileInput();
     this.relicOverlay.show(pickRelicRewardOptions(this.player.relics));
+    this.spawnSelectionPhantom();
     this.state = GameState.PAUSED;
   }
 
@@ -235,23 +239,17 @@ export class Game {
   }
 
   private updatePaused(dt: number): void {
+    const phantom = this.selectionPhantom;
+    if (!phantom) return;
+
     this.mobileControls.updateFromPointer(this.input);
-
-    if (this.input.isJoystickActive()) {
-      this.input.clearTouchTarget();
-    } else if (this.input.pointerDown && this.input.pointer) {
-      this.input.setTouchTarget(this.input.pointer.x, this.input.pointer.y);
-    } else {
-      this.input.clearTouchTarget();
-    }
-
-    this.player.updateLevelUp(dt, this.input);
+    phantom.update(dt, this.input);
 
     if (this.pauseKind === 'level_up') {
-      const chosen = this.levelUpOverlay.updateSelection(this.player.x, this.player.y, dt);
+      const chosen = this.levelUpOverlay.updateSelection(phantom.x, phantom.y, dt);
       if (chosen) this.confirmUpgrade(chosen);
     } else {
-      const chosen = this.relicOverlay.updateSelection(this.player.x, this.player.y, dt);
+      const chosen = this.relicOverlay.updateSelection(phantom.x, phantom.y, dt);
       if (chosen) this.confirmRelic(chosen);
     }
   }
@@ -375,13 +373,14 @@ export class Game {
     }
 
     if (this.state === GameState.PAUSED) {
+      this.player.draw(ctx);
       this.mobileControls.draw(ctx, this.player);
       if (this.pauseKind === 'level_up') {
         this.levelUpOverlay.draw(ctx);
       } else {
         this.relicOverlay.draw(ctx);
       }
-      this.player.draw(ctx);
+      this.selectionPhantom?.draw(ctx);
     }
 
     if (this.state === GameState.GAME_OVER) {

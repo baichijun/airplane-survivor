@@ -108,10 +108,10 @@ export class LevelUpOverlay {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 22px sans-serif';
-    ctx.fillText('升级！飞入选项框选择奖励', GAME_WIDTH / 2, 72);
+    ctx.fillText('升级！操控幻影飞入选项', GAME_WIDTH / 2, 72);
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '12px sans-serif';
-    ctx.fillText('停留 0.5 秒确认 · 也可点击', GAME_WIDTH / 2, 96);
+    ctx.fillText('停留 0.5 秒确认 · 也可点击 · 本体保持原位', GAME_WIDTH / 2, 96);
 
     const dwellProgress = this.getDwellProgress();
     const innerPad = 8;

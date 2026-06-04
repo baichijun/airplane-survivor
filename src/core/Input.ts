@@ -1,15 +1,16 @@
 import type { Engine } from './Engine';
-import { JOYSTICK_ACTIVATION_THRESHOLD, JOYSTICK_DIAGONAL_SPEED_MULT } from '../config/balance';
+import { JOYSTICK_ACTIVATION_THRESHOLD } from '../config/balance';
 
 /** 键盘 + 触摸输入 */
 export class Input {
   private keys = new Set<string>();
-  touchTarget: { x: number; y: number } | null = null;
   /** 最近一次点击/触摸（游戏坐标） */
   pointer: { x: number; y: number } | null = null;
   pointerDown = false;
   /** 虚拟摇杆归一化偏移（-1～1），由 MobileControls 每帧写入 */
   private joystick = { x: 0, y: 0 };
+  /** 当前手指在操控摇杆（含未过激活阈值），用于避免与其它触摸逻辑冲突 */
+  private joystickCaptured = false;
   private shieldRequested = false;
 
   constructor(engine: Engine) {
@@ -50,10 +51,10 @@ export class Input {
       { passive: false },
     );
     canvas.addEventListener('touchend', () => {
-      this.touchTarget = null;
       this.pointerDown = false;
       this.pointer = null;
       this.clearJoystick();
+      this.setJoystickCaptured(false);
     });
 
     canvas.addEventListener('mousedown', (e) => {
@@ -70,6 +71,7 @@ export class Input {
       this.pointerDown = false;
       this.pointer = null;
       this.clearJoystick();
+      this.setJoystickCaptured(false);
     });
   }
 
@@ -90,29 +92,29 @@ export class Input {
     return { x: 0, y: 0 };
   }
 
-  /**
-   * 虚拟摇杆：吸附到 8 方向；斜向速度为直行的 JOYSTICK_DIAGONAL_SPEED_MULT。
-   */
-  /** 摇杆是否已推过激活阈值（用于暂停界面区分摇杆与屏幕拖拽） */
+  setJoystickCaptured(captured: boolean): void {
+    this.joystickCaptured = captured;
+  }
+
+  isJoystickCaptured(): boolean {
+    return this.joystickCaptured;
+  }
+
+  /** 摇杆是否已推过激活阈值 */
   isJoystickActive(): boolean {
     const { x, y } = this.joystick;
     return Math.hypot(x, y) >= JOYSTICK_ACTIVATION_THRESHOLD;
   }
 
+  /** 虚拟摇杆：模拟量方向，各向移动速度一致（与键盘相同） */
   getJoystickDirection(): { x: number; y: number } {
     const { x, y } = this.joystick;
     const len = Math.hypot(x, y);
     if (len < JOYSTICK_ACTIVATION_THRESHOLD) return { x: 0, y: 0 };
-
-    const angle = Math.atan2(y, x);
-    const eighth = Math.round(angle / (Math.PI / 4)) % 8;
-    const snapped = eighth * (Math.PI / 4);
-    const isDiagonal = eighth % 2 === 1;
-    const mag = isDiagonal ? JOYSTICK_DIAGONAL_SPEED_MULT : 1;
-    return { x: Math.cos(snapped) * mag, y: Math.sin(snapped) * mag };
+    return { x: x / len, y: y / len };
   }
 
-  /** 获取移动方向向量（键盘 + 虚拟摇杆；触摸拖拽由 Player 在暂停选奖励时使用） */
+  /** 获取移动方向向量（键盘 + 虚拟摇杆） */
   getMoveDirection(): { x: number; y: number } {
     const kb = this.getKeyboardDirection();
     if (kb.x !== 0 || kb.y !== 0) return kb;
@@ -127,15 +129,6 @@ export class Input {
   clearJoystick(): void {
     this.joystick.x = 0;
     this.joystick.y = 0;
-  }
-
-  /** 设置触摸拖拽目标（暂停选奖励等非战斗场景） */
-  setTouchTarget(x: number, y: number): void {
-    this.touchTarget = { x, y };
-  }
-
-  clearTouchTarget(): void {
-    this.touchTarget = null;
   }
 
   consumeShieldRequest(): boolean {

@@ -141,13 +141,6 @@ export class Player {
       this.y += dir.y * this.speed * dt;
     }
 
-    if (input.touchTarget) {
-      const target = input.touchTarget;
-      const lerp = 1 - Math.pow(0.001, dt);
-      this.x += (target.x - this.x) * lerp;
-      this.y += (target.y - this.y) * lerp;
-    }
-
     this.x = Math.max(PLAYER_MARGIN, Math.min(GAME_WIDTH - PLAYER_MARGIN, this.x));
     this.y = Math.max(minY, Math.min(GAME_HEIGHT - PLAYER_MARGIN, this.y));
   }
@@ -157,11 +150,6 @@ export class Player {
     this.tickTimers(dt);
     this.attackTimer += dt;
     for (const drone of this.drones) drone.update(dt, this);
-  }
-
-  updateLevelUp(dt: number, input: Input): void {
-    this.applyMovement(dt, input, PLAYER_MARGIN);
-    // 暂停选奖励期间不推进无敌/护盾等战斗计时，避免选完立刻可受伤
   }
 
   private tickTimers(dt: number): void {

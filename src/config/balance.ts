@@ -81,11 +81,8 @@ export function mobileJoystickCenterY(joystickBaseR: number): number {
   return joystickBottom - joystickBaseR;
 }
 
-/** 虚拟摇杆斜向移动速度倍率（相对直行，8 方向中的 4 个斜向） */
-export const JOYSTICK_DIAGONAL_SPEED_MULT = 0.45;
-
-/** 摇杆归一化偏移低于此值时自机保持静止（需推过约 40% 行程才移动） */
-export const JOYSTICK_ACTIVATION_THRESHOLD = 0.4;
+/** 摇杆归一化偏移低于此值时自机保持静止（需推过约 30% 行程才移动） */
+export const JOYSTICK_ACTIVATION_THRESHOLD = 0.3;
 
 /** Boss 在场时，普通敌机下落速度倍率 */
 export const ENEMY_SPEED_MULT_DURING_BOSS = 0.7;
