@@ -67,22 +67,31 @@ export const RELIC_POOL: RelicDef[] = [
   },
 ];
 
-/** 随机抽取 2 个未拥有的宝物 + 跳过选项 */
+/** Boss 击杀后供选择的选项数量 */
+export const RELIC_REWARD_OPTION_COUNT = 3;
+
+/** 「强化舰体」跳过选项（未拥有遗物不足时用于补齐） */
+export const RELIC_SKIP_OPTION: RelicRewardOption = {
+  kind: 'skip',
+  name: '强化舰体',
+  description: '不要宝物\n最大生命 +30%\n恢复 50% 最大生命',
+};
+
+/** 从未拥有的遗物库随机抽取最多 3 个；不足时用「强化舰体」补齐 */
 export function pickRelicRewardOptions(owned: Set<RelicId>): RelicRewardOption[] {
   const pool = RELIC_POOL.filter((r) => !owned.has(r.id));
   const picked: RelicDef[] = [];
   const temp = [...pool];
-  for (let i = 0; i < 2 && temp.length > 0; i++) {
+  const relicCount = Math.min(RELIC_REWARD_OPTION_COUNT, temp.length);
+  for (let i = 0; i < relicCount; i++) {
     const idx = Math.floor(Math.random() * temp.length);
     picked.push(temp.splice(idx, 1)[0]);
   }
 
   const options: RelicRewardOption[] = picked.map((relic) => ({ kind: 'relic', relic }));
-  options.push({
-    kind: 'skip',
-    name: '强化舰体',
-    description: '不要宝物\n最大生命 +30%\n恢复 50% 最大生命',
-  });
+  while (options.length < RELIC_REWARD_OPTION_COUNT) {
+    options.push(RELIC_SKIP_OPTION);
+  }
   return options;
 }
 

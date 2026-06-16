@@ -1,7 +1,7 @@
 import type { UpgradeDef, UpgradePickCounts } from '../types';
 import type { Player } from '../entities/Player';
 import { GAME_WIDTH, GAME_HEIGHT, LEVEL_UP_SELECT_DWELL } from '../config/balance';
-import { getUpgradeStatDisplay, wrapCanvasText, drawWrappedCenterText } from '../config/upgradeDisplay';
+import { getUpgradeStatDisplay, formatUpgradeEffectSummary, wrapCanvasText, drawWrappedCenterText } from '../config/upgradeDisplay';
 
 /** 升级选项卡片宽度（像素） */
 const CARD_W = 112;
@@ -135,34 +135,39 @@ export class LevelUpOverlay {
       const cx = card.x + card.w / 2;
       let ty = card.y + 14;
 
-      ctx.fillStyle = '#a855f7';
-      ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
+
+      // 第一行：强化名称
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px sans-serif';
+      const nameLines = wrapCanvasText(ctx, card.upgrade.name, textW);
+      ty += drawWrappedCenterText(ctx, nameLines.slice(0, 1), cx, ty, 15) + 4;
+
+      // 第二行：等级
+      ctx.fillStyle = '#a855f7';
+      ctx.font = 'bold 12px sans-serif';
       const upgradeLv = this.pickCounts[card.upgrade.id];
       ctx.fillText(`LV${upgradeLv} → LV${upgradeLv + 1}`, cx, ty);
       ty += 18;
 
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 13px sans-serif';
-      const nameLines = wrapCanvasText(ctx, card.upgrade.name, textW);
-      ty += drawWrappedCenterText(ctx, nameLines, cx, ty, 15) + 4;
-
       const stat = getUpgradeStatDisplay(card.upgrade.id, this.player);
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(stat.label, cx, ty);
-      ty += 13;
+      const effectSummary = formatUpgradeEffectSummary(stat.label, card.upgrade.description);
 
+      // 第三行：属性 + 效果描述（原灰色两行合并，黄色粗体）
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(`${stat.before} → ${stat.after}`, cx, ty);
-      ty += 16;
+      const effectLines = wrapCanvasText(ctx, effectSummary, textW);
+      ty += drawWrappedCenterText(ctx, effectLines.slice(0, 2), cx, ty, 13) + 4;
 
-      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      // 第四行：实际数值变化（原黄色，改为灰色）
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.font = '10px sans-serif';
-      const descLines = wrapCanvasText(ctx, card.upgrade.description, textW);
-      drawWrappedCenterText(ctx, descLines.slice(0, 2), cx, ty, 12);
+      const valueChange = stat.detail
+        ? `${stat.before} → ${stat.after} · ${stat.detail}`
+        : `${stat.before} → ${stat.after}`;
+      const valueLines = wrapCanvasText(ctx, valueChange, textW);
+      drawWrappedCenterText(ctx, valueLines.slice(0, 2), cx, ty, 12);
 
       if (isHovered && dwellProgress > 0) {
         const barW = card.w - 16;

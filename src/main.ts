@@ -1,4 +1,7 @@
 import './style.css';
 import { Game } from './core/Game';
+import { loadShipSprites } from './ui/SpriteLoader';
 
-new Game('game-canvas');
+loadShipSprites().then(() => {
+  new Game('game-canvas');
+});

@@ -199,13 +199,22 @@ export const SHIELD_DURATION = 1;
 /** 主动护盾冷却时间（秒） */
 export const SHIELD_COOLDOWN = 7;
 
-/** 升级：自机攻速每选一次倍率增量（+15%，间隔 ÷1.15） */
+/** 升级：自机攻速每选一次倍率增量（+30%，射击间隔 ÷1.3） */
 export const UPGRADE_ATTACK_SPEED_MULT = 1.3;
+
+/** 升级：移速每选一次倍率增量（+10%） */
+export const UPGRADE_MOVE_SPEED_MULT = 1.1;
+
+/** 升级：最大生命每选一次倍率（×1.2） */
+export const UPGRADE_MAX_HP_MULT = 1.2;
+
+/** 升级：装甲强化选取后恢复最大生命的比例 */
+export const UPGRADE_MAX_HP_HEAL_RATIO = 0.3;
 
 /** 升级：无人机伤害每选一次倍率增量（+50%） */
 export const UPGRADE_DRONE_DAMAGE_MULT = 1.5;
 
-/** 升级：无人机攻速每选一次倍率增量（+30%） */
+/** 升级：无人机攻速每选一次倍率增量（+50%，间隔 ÷1.5） */
 export const UPGRADE_DRONE_ATTACK_SPEED_MULT = 1.5;
 
 /** 左右无人机相对玩家中心的横向偏移（像素） */

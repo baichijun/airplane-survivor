@@ -21,6 +21,8 @@ export class Enemy {
   height: number;
   color: string;
   attackTimer: number;
+  /** 贴图编号（1/2/4/5）；重甲在 4 与 5 间随机 */
+  spriteId: number;
   /** 目标玩家位置，用于瞄准射击 */
   targetX = 0;
   targetY = 0;
@@ -44,6 +46,13 @@ export class Enemy {
     this.height = cfg.height;
     this.color = cfg.color;
     this.attackTimer = Math.random() * cfg.attackSpeed;
+    this.spriteId = Enemy.pickSpriteId(type);
+  }
+
+  private static pickSpriteId(type: EnemyType): number {
+    if (type === 'scout') return 1;
+    if (type === 'fighter') return 2;
+    return Math.random() < 0.5 ? 4 : 5;
   }
 
   update(dt: number, playerX: number, playerY: number, speedMult = 1): void {
@@ -72,7 +81,7 @@ export class Enemy {
     const hw = this.width / 2;
     const hh = this.height / 2;
 
-    drawEnemyShip(ctx, this.type, this.x, this.y, this.width, this.height);
+    drawEnemyShip(ctx, this.type, this.x, this.y, this.width, this.height, this.spriteId);
 
     const barW = this.width;
     const barH = 3;

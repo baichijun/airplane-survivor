@@ -4,6 +4,9 @@ import {
   UPGRADE_ATTACK_SPEED_MULT,
   UPGRADE_DRONE_ATTACK_SPEED_MULT,
   UPGRADE_DRONE_DAMAGE_MULT,
+  UPGRADE_MAX_HP_HEAL_RATIO,
+  UPGRADE_MAX_HP_MULT,
+  UPGRADE_MOVE_SPEED_MULT,
 } from './balance';
 
 /** 升级奖励池（升级界面随机抽取） */
@@ -11,7 +14,7 @@ export const UPGRADE_POOL: UpgradeDef[] = [
   {
     id: 'attackSpeed',
     name: '急速射击',
-    description: '攻速 +15%',
+    description: '攻速 +30%',
   },
   {
     id: 'bulletDamage',
@@ -31,7 +34,7 @@ export const UPGRADE_POOL: UpgradeDef[] = [
   {
     id: 'maxHp',
     name: '装甲强化',
-    description: '最大生命提升至 1.2 倍；恢复 30% 最大生命',
+    description: '最大生命*1.2 恢复30%',
   },
   {
     id: 'droneDamage',
@@ -41,7 +44,7 @@ export const UPGRADE_POOL: UpgradeDef[] = [
   {
     id: 'droneAttackSpeed',
     name: '无人机速射',
-    description: '无人机攻速 +30%',
+    description: '无人机射速 +50%',
   },
 ];
 
@@ -69,11 +72,11 @@ export function applyUpgrade(player: Player, id: UpgradeId): void {
       player.bulletCount += 1;
       break;
     case 'moveSpeed':
-      player.speed *= 1.1;
+      player.speed *= UPGRADE_MOVE_SPEED_MULT;
       break;
     case 'maxHp': {
-      player.maxHp = Math.round(player.maxHp * 1.2);
-      const heal = Math.round(player.maxHp * 0.3);
+      player.maxHp = Math.round(player.maxHp * UPGRADE_MAX_HP_MULT);
+      const heal = Math.round(player.maxHp * UPGRADE_MAX_HP_HEAL_RATIO);
       player.hp = Math.min(player.maxHp, player.hp + heal);
       break;
     }
