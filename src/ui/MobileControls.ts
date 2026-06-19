@@ -4,6 +4,7 @@ import {
   GAME_WIDTH,
   hudBarTopY,
   mobileJoystickCenterY,
+  JOYSTICK_CANCEL_MIN,
   JOYSTICK_DELTA_THRESHOLD,
 } from '../config/balance';
 import { UI, drawGlowCircle, drawShieldIcon, fontDisplay } from './theme';
@@ -312,15 +313,29 @@ export class MobileControls {
     }
   }
 
-  /** 根据手指位移增量更新锁定方向；手指静止时保持上一方向 */
+  /** 根据手指位移增量更新锁定方向（八方向吸附）；手指静止时保持上一方向 */
   private updateJoystickFromDelta(x: number, y: number): [number, number] {
     const deltaX = x - this.lastPointerX;
     const deltaY = y - this.lastPointerY;
     const deltaDist = Math.hypot(deltaX, deltaY);
+    const isMoving = this.latchedDirX !== 0 || this.latchedDirY !== 0;
 
-    if (deltaDist >= JOYSTICK_DELTA_THRESHOLD) {
-      this.latchedDirX = deltaX / deltaDist;
-      this.latchedDirY = deltaY / deltaDist;
+    if (deltaDist > 0) {
+      if (
+        isMoving
+        && deltaDist > JOYSTICK_CANCEL_MIN
+        && deltaDist < JOYSTICK_DELTA_THRESHOLD
+      ) {
+        const pullDir = snapTo8Directions(deltaX, deltaY);
+        if (!same8Direction(this.latchedDirX, this.latchedDirY, pullDir.x, pullDir.y)) {
+          this.latchedDirX = 0;
+          this.latchedDirY = 0;
+        }
+      } else if (deltaDist >= JOYSTICK_DELTA_THRESHOLD) {
+        const snapped = snapTo8Directions(deltaX, deltaY);
+        this.latchedDirX = snapped.x;
+        this.latchedDirY = snapped.y;
+      }
     }
 
     this.lastPointerX = x;
@@ -332,4 +347,17 @@ export class MobileControls {
 
     return [this.latchedDirX, this.latchedDirY];
   }
+}
+
+/** 将位移吸附到八方向（与键盘 WASD 斜向归一化一致） */
+function snapTo8Directions(dx: number, dy: number): { x: number; y: number } {
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return { x: 0, y: 0 };
+  const angle = Math.atan2(dy, dx);
+  const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+  return { x: Math.cos(snapped), y: Math.sin(snapped) };
+}
+
+function same8Direction(ax: number, ay: number, bx: number, by: number): boolean {
+  return ax * bx + ay * by > 0.99;
 }

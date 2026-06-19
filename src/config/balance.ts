@@ -87,7 +87,9 @@ export function mobileJoystickCenterY(joystickBaseR: number): number {
 /** 摇杆归一化偏移低于此值时自机保持静止（需推过约 30% 行程才移动） */
 export const JOYSTICK_ACTIVATION_THRESHOLD = 0.3;
 
-/** 摇杆位移增量低于此值（像素）时不更新锁定方向，用于过滤抖动 */
+/** 持续飞行时，变向轻拉超过此距离（像素）且未达锁定阈值则刹车停住 */
+export const JOYSTICK_CANCEL_MIN = 2;
+/** 摇杆位移增量达到此值（像素）时锁定新的八方向飞行 */
 export const JOYSTICK_DELTA_THRESHOLD = 6;
 
 /** Boss 在场时，普通敌机下落速度倍率 */
