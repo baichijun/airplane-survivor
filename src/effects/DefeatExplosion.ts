@@ -4,8 +4,8 @@ import { drawGlowCircle, UI } from '../ui/theme';
 export type DefeatExplosionKind = 'enemy' | 'boss' | 'player';
 
 const FLASH_COUNT: Record<DefeatExplosionKind, number> = {
-  enemy: 3,
-  boss: 10,
+  enemy: 4,
+  boss: 15,
   player: 3,
 };
 

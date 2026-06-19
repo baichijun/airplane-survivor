@@ -275,12 +275,12 @@ export class SettingsOverlay {
     ctx.textAlign = 'left';
     ctx.fillStyle = disabled ? UI.textDim : UI.textMuted;
     ctx.font = fontBody(12, true);
-    ctx.fillText(slider.label, track.x, track.y - 10);
+    ctx.fillText(slider.label, track.x, track.y - 14);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = disabled ? UI.textDim : UI.accentBright;
     ctx.font = fontDisplay(12, 700);
-    ctx.fillText(`${pct}%`, track.x + track.w, track.y - 10);
+    ctx.fillText(`${pct}%`, track.x + track.w, track.y - 14);
 
     ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
     ctx.beginPath();
