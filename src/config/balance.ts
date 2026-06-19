@@ -1,4 +1,4 @@
-import type { EnemyConfig, EnemyType } from '../types';
+import type { EnemyConfig, EnemyType, GameMode } from '../types';
 
 /** 逻辑画布宽度（像素，iPhone 基准） */
 export const GAME_WIDTH = 375;
@@ -87,15 +87,47 @@ export function mobileJoystickCenterY(joystickBaseR: number): number {
 /** 摇杆归一化偏移低于此值时自机保持静止（需推过约 30% 行程才移动） */
 export const JOYSTICK_ACTIVATION_THRESHOLD = 0.3;
 
+/** 摇杆位移增量低于此值（像素）时不更新锁定方向，用于过滤抖动 */
+export const JOYSTICK_DELTA_THRESHOLD = 6;
+
 /** Boss 在场时，普通敌机下落速度倍率 */
 export const ENEMY_SPEED_MULT_DURING_BOSS = 0.7;
 
-/** 简单模式：初始生命相对标准模式的倍率 */
-export const EASY_MODE_INITIAL_HP_MULT = 3;
+/** 困难模式：标准初始生命，无自动恢复 */
+/** 普通模式：初始生命倍率 */
+export const NORMAL_MODE_INITIAL_HP_MULT = 3;
+/** 普通模式：生命恢复间隔（秒） */
+export const NORMAL_MODE_REGEN_INTERVAL = 6;
+/** 简单模式：初始生命倍率 */
+export const EASY_MODE_INITIAL_HP_MULT = 5;
 /** 简单模式：生命恢复间隔（秒） */
-export const EASY_MODE_REGEN_INTERVAL = 6;
-/** 简单模式：每次恢复的生命值 */
-export const EASY_MODE_REGEN_AMOUNT = 1;
+export const EASY_MODE_REGEN_INTERVAL = 4;
+/** 普通/简单模式：每次恢复的生命值 */
+export const MODE_REGEN_AMOUNT = 1;
+
+/** 按难度返回初始生命倍率 */
+export function getModeInitialHpMult(mode: GameMode): number {
+  switch (mode) {
+    case 'easy':
+      return EASY_MODE_INITIAL_HP_MULT;
+    case 'normal':
+      return NORMAL_MODE_INITIAL_HP_MULT;
+    case 'hard':
+      return 1;
+  }
+}
+
+/** 按难度返回生命恢复间隔（秒）；困难模式无恢复 */
+export function getModeRegenInterval(mode: GameMode): number | null {
+  switch (mode) {
+    case 'easy':
+      return EASY_MODE_REGEN_INTERVAL;
+    case 'normal':
+      return NORMAL_MODE_REGEN_INTERVAL;
+    case 'hard':
+      return null;
+  }
+}
 
 /** 受击后无敌帧持续时间（秒） */
 export const INVINCIBLE_DURATION = 1.0;

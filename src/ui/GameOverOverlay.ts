@@ -58,6 +58,7 @@ export class GameOverOverlay {
 
 /** 开始菜单 */
 export class MenuOverlay {
+  private hardBtn = { x: 0, y: 0, w: 180, h: 44 };
   private normalBtn = { x: 0, y: 0, w: 180, h: 44 };
   private easyBtn = { x: 0, y: 0, w: 180, h: 44 };
 
@@ -82,19 +83,21 @@ export class MenuOverlay {
 
     ctx.fillStyle = UI.textDim;
     ctx.font = fontBody(12);
-    ctx.fillText('飞机大战 · 幸存者', GAME_WIDTH / 2, 182);
+    ctx.fillText('太空战线 · 幸存者', GAME_WIDTH / 2, 182);
 
     ctx.fillStyle = UI.textMuted;
     ctx.font = fontBody(12);
-    ctx.fillText('WASD / 方向键 / 虚拟摇杆移动', GAME_WIDTH / 2, 218);
-    ctx.fillText('空格 / 护盾按钮 · 自动射击', GAME_WIDTH / 2, 238);
+    ctx.fillText('网页端：WASD / 方向键移动 / 空格开启护盾', GAME_WIDTH / 2, 218);
+    ctx.fillText('手机端：按下屏幕任意位置，轻移手指操作 / 点按开启护盾', GAME_WIDTH / 2, 238);
 
-    this.drawModeButton(ctx, GAME_WIDTH / 2 - 92, 278, '标准模式', '#0891b2', UI.accent, this.normalBtn);
-    this.drawModeButton(ctx, GAME_WIDTH / 2 - 92, 338, '简单模式', '#059669', '#34d399', this.easyBtn);
+    this.drawModeButton(ctx, GAME_WIDTH / 2 - 92, 258, '困难模式', '#7f1d1d', '#f87171', this.hardBtn);
+    this.drawModeButton(ctx, GAME_WIDTH / 2 - 92, 312, '普通模式', '#0891b2', UI.accent, this.normalBtn);
+    this.drawModeButton(ctx, GAME_WIDTH / 2 - 92, 366, '简单模式', '#059669', '#34d399', this.easyBtn);
 
     ctx.fillStyle = UI.textDim;
     ctx.font = fontBody(10);
-    ctx.fillText('简单模式：初始生命 ×3，每 5 秒恢复 1 点生命', GAME_WIDTH / 2, 404);
+    ctx.fillText('普通模式：初始生命 ×3，每 6 秒恢复 1 点生命', GAME_WIDTH / 2, 428);
+    ctx.fillText('简单模式：初始生命 ×5，每 4 秒恢复 1 点生命', GAME_WIDTH / 2, 444);
   }
 
   private drawModeButton(
@@ -114,6 +117,7 @@ export class MenuOverlay {
   }
 
   hitTest(x: number, y: number): GameMode | null {
+    if (this.hitRect(x, y, this.hardBtn)) return 'hard';
     if (this.hitRect(x, y, this.normalBtn)) return 'normal';
     if (this.hitRect(x, y, this.easyBtn)) return 'easy';
     return null;

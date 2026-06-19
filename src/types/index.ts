@@ -13,7 +13,7 @@ export const GameState = {
 export type GameState = (typeof GameState)[keyof typeof GameState];
 
 /** 游戏难度模式 */
-export type GameMode = 'normal' | 'easy';
+export type GameMode = 'hard' | 'normal' | 'easy';
 
 /** 敌机类型 */
 export type EnemyType = 'scout' | 'fighter' | 'tank';

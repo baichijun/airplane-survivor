@@ -2,9 +2,9 @@ import type { Input } from '../core/Input';
 import type { Player } from '../entities/Player';
 import {
   GAME_WIDTH,
-  GAME_HEIGHT,
   hudBarTopY,
   mobileJoystickCenterY,
+  JOYSTICK_DELTA_THRESHOLD,
 } from '../config/balance';
 import { UI, drawGlowCircle, drawShieldIcon, fontDisplay } from './theme';
 
@@ -16,37 +16,36 @@ const SHIELD_BTN_SIZE = 58;
 const JOYSTICK_BASE_R = 54;
 /** 摇杆旋钮半径（像素） */
 const JOYSTICK_KNOB_R = 23;
-/** 摇杆中心死区（相对底盘半径） */
-const JOYSTICK_DEAD_ZONE = 0.1;
 
 /** 摇杆与自机重叠时额外判定半径（像素） */
 const JOYSTICK_PLAYER_FADE_EXTRA_R = 20;
 
-/** 移动端虚拟摇杆 + 护盾按钮（浮动摇杆：在左下区域按下时底盘跟随拇指） */
+/** 移动端虚拟摇杆（固定左下，仅展示移动方向）+ 护盾按钮 */
 export class MobileControls {
-  private readonly defaultCenterX = PAD + JOYSTICK_BASE_R;
-  private readonly defaultCenterY = mobileJoystickCenterY(JOYSTICK_BASE_R);
+  private readonly joystickCenterX = PAD + JOYSTICK_BASE_R;
+  private readonly joystickCenterY = mobileJoystickCenterY(JOYSTICK_BASE_R);
 
-  private anchorX = this.defaultCenterX;
-  private anchorY = this.defaultCenterY;
   private joystickDragging = false;
   private shieldBtn = { x: 0, y: 0, w: SHIELD_BTN_SIZE, h: SHIELD_BTN_SIZE };
   private knobOffsetX = 0;
   private knobOffsetY = 0;
+  private lastPointerX = 0;
+  private lastPointerY = 0;
+  private latchedDirX = 0;
+  private latchedDirY = 0;
 
-  /** 重置摇杆锚点与拖拽状态（场景切换时调用，避免残留输入） */
+  /** 重置摇杆拖拽状态（场景切换时调用，避免残留输入） */
   resetJoystick(): void {
     this.joystickDragging = false;
-    this.anchorX = this.defaultCenterX;
-    this.anchorY = this.defaultCenterY;
     this.knobOffsetX = 0;
     this.knobOffsetY = 0;
+    this.lastPointerX = 0;
+    this.lastPointerY = 0;
+    this.latchedDirX = 0;
+    this.latchedDirY = 0;
   }
 
-  /**
-   * 键盘控制时同步摇杆旋钮视觉（触屏拖拽中不覆盖）。
-   * 优先取自机实际位移方向；未移动时回退为键盘方向。
-   */
+  /** 同步摇杆旋钮视觉：反映当前移动方向（键盘与触屏共用） */
   syncKnobVisual(
     input: Input,
     entityX: number,
@@ -55,23 +54,21 @@ export class MobileControls {
     prevY: number,
     dt: number,
   ): void {
-    if (this.joystickDragging) return;
-
     const maxR = JOYSTICK_BASE_R - JOYSTICK_KNOB_R;
     let targetX = 0;
     let targetY = 0;
 
-    const kb = input.getKeyboardDirection();
-    if (kb.x !== 0 || kb.y !== 0) {
+    const dir = input.getMoveDirection();
+    if (dir.x !== 0 || dir.y !== 0) {
+      targetX = dir.x * maxR;
+      targetY = dir.y * maxR;
+    } else {
       const dx = entityX - prevX;
       const dy = entityY - prevY;
       const moved = Math.hypot(dx, dy);
       if (moved > 0.3) {
         targetX = (dx / moved) * maxR;
         targetY = (dy / moved) * maxR;
-      } else {
-        targetX = kb.x * maxR;
-        targetY = kb.y * maxR;
       }
     }
 
@@ -85,9 +82,13 @@ export class MobileControls {
     }
   }
 
-  /** 每帧根据指针更新虚拟摇杆 */
+  /** 每帧根据指针更新移动输入（触屏位移增量） */
   updateFromPointer(input: Input): 'shield' | null {
     this.layoutShieldButton();
+
+    if (this.joystickDragging && input.isJoystickCaptured() && (!input.pointerDown || !input.pointer)) {
+      return null;
+    }
 
     if (!input.pointerDown || !input.pointer) {
       this.releasePointerJoystick(input);
@@ -101,26 +102,23 @@ export class MobileControls {
       return 'shield';
     }
 
-    if (this.hitJoystickZone(x, y) || this.joystickDragging) {
-      if (!this.joystickDragging) {
-        this.anchorX = this.clampAnchorX(x);
-        this.anchorY = this.clampAnchorY(y);
-      }
-      this.joystickDragging = true;
-      input.setJoystickCaptured(true);
-      input.setJoystick(...this.computeJoystickOffset(x, y));
-      return null;
+    if (!this.joystickDragging) {
+      this.lastPointerX = x;
+      this.lastPointerY = y;
+      this.latchedDirX = 0;
+      this.latchedDirY = 0;
     }
-
-    this.releasePointerJoystick(input);
+    this.joystickDragging = true;
+    input.setJoystickCaptured(true);
+    input.setJoystick(...this.updateJoystickFromDelta(x, y));
     return null;
   }
 
   private releasePointerJoystick(input: Input): void {
     if (this.joystickDragging) {
       this.joystickDragging = false;
-      this.anchorX = this.defaultCenterX;
-      this.anchorY = this.defaultCenterY;
+      this.latchedDirX = 0;
+      this.latchedDirY = 0;
     }
     input.setJoystickCaptured(false);
     input.clearJoystick();
@@ -156,22 +154,20 @@ export class MobileControls {
   }
 
   private isPlayerNearJoystick(player: Player): boolean {
-    const cx = this.anchorX;
-    const cy = this.anchorY;
+    const cx = this.joystickCenterX;
+    const cy = this.joystickCenterY;
     const radius = JOYSTICK_BASE_R + JOYSTICK_PLAYER_FADE_EXTRA_R + player.hitRadius;
     return (player.x - cx) ** 2 + (player.y - cy) ** 2 <= radius * radius;
   }
 
   private drawJoystick(ctx: CanvasRenderingContext2D): void {
-    const cx = this.anchorX;
-    const cy = this.anchorY;
+    const cx = this.joystickCenterX;
+    const cy = this.joystickCenterY;
     const knobActive = this.knobOffsetX !== 0 || this.knobOffsetY !== 0;
     const pulse = knobActive ? 0.85 + Math.sin(performance.now() * 0.012) * 0.15 : 1;
 
-    // 外圈光晕
     drawGlowCircle(ctx, cx, cy, JOYSTICK_BASE_R + 4, UI.accentDim, knobActive ? 18 : 10);
 
-    // 底盘
     const baseGrad = ctx.createRadialGradient(cx, cy, JOYSTICK_BASE_R * 0.2, cx, cy, JOYSTICK_BASE_R);
     baseGrad.addColorStop(0, 'rgba(18, 36, 68, 0.92)');
     baseGrad.addColorStop(1, 'rgba(6, 12, 28, 0.88)');
@@ -186,7 +182,6 @@ export class MobileControls {
     ctx.arc(cx, cy, JOYSTICK_BASE_R, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 内圈刻度
     ctx.strokeStyle = 'rgba(34, 211, 238, 0.2)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -283,7 +278,6 @@ export class MobileControls {
     ctx.roundRect(bx + 0.5, by + 0.5, bw - 1, bh - 1, 12);
     ctx.stroke();
 
-    // 冷却环形进度
     if (!ready && !active && player.shieldCooldownTimer > 0) {
       const ratio = player.shieldCooldownRatio;
       ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)';
@@ -305,7 +299,6 @@ export class MobileControls {
     const iconStroke = active ? 'rgba(6, 78, 99, 0.8)' : ready ? UI.accent : 'rgba(100, 116, 139, 0.5)';
     drawShieldIcon(ctx, cx, cy - 2, 26, iconFill, iconStroke);
 
-    // 状态文字在按钮下方
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     if (active) {
@@ -319,44 +312,24 @@ export class MobileControls {
     }
   }
 
-  /** 左下操控区：首次按下时在此区域内生成浮动摇杆 */
-  private hitJoystickZone(x: number, y: number): boolean {
-    const zoneTop = GAME_HEIGHT * 0.28;
-    const zoneRight = GAME_WIDTH * 0.52;
-    return x <= zoneRight && y >= zoneTop;
-  }
+  /** 根据手指位移增量更新锁定方向；手指静止时保持上一方向 */
+  private updateJoystickFromDelta(x: number, y: number): [number, number] {
+    const deltaX = x - this.lastPointerX;
+    const deltaY = y - this.lastPointerY;
+    const deltaDist = Math.hypot(deltaX, deltaY);
 
-  private clampAnchorX(x: number): number {
-    const min = PAD + JOYSTICK_BASE_R;
-    const max = GAME_WIDTH * 0.52 - JOYSTICK_BASE_R;
-    return Math.max(min, Math.min(max, x));
-  }
+    if (deltaDist >= JOYSTICK_DELTA_THRESHOLD) {
+      this.latchedDirX = deltaX / deltaDist;
+      this.latchedDirY = deltaY / deltaDist;
+    }
 
-  private clampAnchorY(y: number): number {
-    const min = GAME_HEIGHT * 0.28 + JOYSTICK_BASE_R;
-    const max = hudBarTopY() - JOYSTICK_BASE_R - 8;
-    return Math.max(min, Math.min(max, y));
-  }
+    this.lastPointerX = x;
+    this.lastPointerY = y;
 
-  private computeJoystickOffset(x: number, y: number): [number, number] {
-    const cx = this.anchorX;
-    const cy = this.anchorY;
-    const dx = x - cx;
-    const dy = y - cy;
-    const dist = Math.hypot(dx, dy);
-    const maxR = JOYSTICK_BASE_R - JOYSTICK_KNOB_R;
-
-    if (dist < JOYSTICK_DEAD_ZONE * JOYSTICK_BASE_R) {
-      this.knobOffsetX = 0;
-      this.knobOffsetY = 0;
+    if (this.latchedDirX === 0 && this.latchedDirY === 0) {
       return [0, 0];
     }
 
-    const clamped = Math.min(dist, maxR);
-    const nx = dx / dist;
-    const ny = dy / dist;
-    this.knobOffsetX = nx * clamped;
-    this.knobOffsetY = ny * clamped;
-    return [this.knobOffsetX / maxR, this.knobOffsetY / maxR];
+    return [this.latchedDirX, this.latchedDirY];
   }
 }

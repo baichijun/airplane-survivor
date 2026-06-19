@@ -12,6 +12,8 @@ export class Input {
   /** 当前手指在操控摇杆（含未过激活阈值），用于避免与其它触摸逻辑冲突 */
   private joystickCaptured = false;
   private shieldRequested = false;
+  /** 主控触摸点 id，避免多指切换导致摇杆向量突变 */
+  private activeTouchId: number | null = null;
 
   constructor(engine: Engine) {
     window.addEventListener('keydown', (e) => {
@@ -31,10 +33,11 @@ export class Input {
       'touchstart',
       (e) => {
         e.preventDefault();
-        const t = e.touches[0];
-        if (!t) return;
-        const pos = engine.screenToGame(t.clientX, t.clientY);
-        this.pointer = pos;
+        if (this.activeTouchId !== null) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        this.activeTouchId = touch.identifier;
+        this.pointer = engine.screenToGame(touch.clientX, touch.clientY);
         this.pointerDown = true;
       },
       { passive: false },
@@ -43,19 +46,26 @@ export class Input {
       'touchmove',
       (e) => {
         e.preventDefault();
-        const t = e.touches[0];
-        if (!t) return;
-        const pos = engine.screenToGame(t.clientX, t.clientY);
-        this.pointer = pos;
+        if (this.activeTouchId === null) return;
+        const touch = this.findTouch(e.touches, this.activeTouchId);
+        if (!touch) return;
+        this.pointer = engine.screenToGame(touch.clientX, touch.clientY);
       },
       { passive: false },
     );
-    canvas.addEventListener('touchend', () => {
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      if (this.activeTouchId === null) return;
+      const ended = this.findTouch(e.changedTouches, this.activeTouchId);
+      if (!ended) return;
+      this.activeTouchId = null;
       this.pointerDown = false;
       this.pointer = null;
       this.clearJoystick();
       this.setJoystickCaptured(false);
-    });
+    };
+    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
     canvas.addEventListener('mousedown', (e) => {
       const pos = engine.screenToGame(e.clientX, e.clientY);
@@ -73,6 +83,14 @@ export class Input {
       this.clearJoystick();
       this.setJoystickCaptured(false);
     });
+  }
+
+  private findTouch(list: TouchList, id: number): Touch | null {
+    for (let i = 0; i < list.length; i++) {
+      const touch = list.item(i);
+      if (touch && touch.identifier === id) return touch;
+    }
+    return null;
   }
 
   isDown(key: string): boolean {

@@ -1,12 +1,12 @@
 import {
   DRONE_ATTACK_SPEED_MULT,
   DRONE_DAMAGE_MULT,
-  EASY_MODE_INITIAL_HP_MULT,
-  EASY_MODE_REGEN_AMOUNT,
-  EASY_MODE_REGEN_INTERVAL,
   GAME_WIDTH,
   GAME_HEIGHT,
+  getModeInitialHpMult,
+  getModeRegenInterval,
   INVINCIBLE_DURATION,
+  MODE_REGEN_AMOUNT,
   PLAYER_INITIAL,
   PLAYER_MARGIN,
   RELIC_DODGE_CHANCE,
@@ -46,8 +46,8 @@ export class Player {
   /** 动能转化：累计命中敌机次数 */
   kineticHitCounter = 0;
   /** 当前难度模式 */
-  mode: GameMode = 'normal';
-  /** 简单模式：生命恢复计时 */
+  mode: GameMode = 'hard';
+  /** 普通/简单模式：生命恢复计时 */
   regenTimer = 0;
   /** 自机被击破动画播放中 */
   isDying = false;
@@ -68,16 +68,12 @@ export class Player {
     this.drones = [new Drone('left'), new Drone('right')];
   }
 
-  reset(mode: GameMode = 'normal'): void {
+  reset(mode: GameMode = 'hard'): void {
     this.mode = mode;
     this.x = GAME_WIDTH / 2;
     this.y = GAME_HEIGHT - 80;
     const baseMaxHp = PLAYER_INITIAL.maxHp;
-    if (mode === 'easy') {
-      this.maxHp = baseMaxHp * EASY_MODE_INITIAL_HP_MULT;
-    } else {
-      this.maxHp = baseMaxHp;
-    }
+    this.maxHp = baseMaxHp * getModeInitialHpMult(mode);
     this.hp = this.maxHp;
     this.speed = PLAYER_INITIAL.speed;
     this.attackSpeed = PLAYER_INITIAL.attackSpeed;
@@ -161,19 +157,20 @@ export class Player {
     if (this.shieldActiveTimer > 0) this.shieldActiveTimer -= dt;
     if (this.shieldCooldownTimer > 0) this.shieldCooldownTimer -= dt;
     if (this.vampCooldownTimer > 0) this.vampCooldownTimer -= dt;
-    this.tickEasyModeRegen(dt);
+    this.tickModeRegen(dt);
   }
 
-  /** 简单模式：定时恢复生命 */
-  private tickEasyModeRegen(dt: number): void {
-    if (this.mode !== 'easy' || this.hp >= this.maxHp) return;
+  /** 普通/简单模式：定时恢复生命 */
+  private tickModeRegen(dt: number): void {
+    const interval = getModeRegenInterval(this.mode);
+    if (interval === null || this.hp >= this.maxHp) return;
 
     this.regenTimer += dt;
-    while (this.regenTimer >= EASY_MODE_REGEN_INTERVAL && this.hp < this.maxHp) {
-      this.regenTimer -= EASY_MODE_REGEN_INTERVAL;
+    while (this.regenTimer >= interval && this.hp < this.maxHp) {
+      this.regenTimer -= interval;
       this.hp = Math.min(
         this.maxHp,
-        this.hp + this.scaleHealAmount(EASY_MODE_REGEN_AMOUNT),
+        this.hp + this.scaleHealAmount(MODE_REGEN_AMOUNT),
       );
     }
   }
