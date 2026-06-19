@@ -14,7 +14,7 @@ export const UPGRADE_POOL: UpgradeDef[] = [
   {
     id: 'attackSpeed',
     name: '急速射击',
-    description: '攻速 +30%',
+    description: '射击间隔 -30%',
   },
   {
     id: 'bulletDamage',

@@ -197,20 +197,21 @@ export class BossAttackSystem {
 
   private spawnZoneHazards(boss: Boss, count: number): Bullet[] {
     const zoneWidth = GAME_WIDTH / BOSS_ZONE_COUNT;
+    const zoneTop = boss.y + boss.height / 2;
     const indices = pickRandomIndices(BOSS_ZONE_COUNT, count);
     return indices.map((index) => {
       const left = index * zoneWidth;
       const right = left + zoneWidth;
       const hazard = new Bullet(
         (left + right) / 2,
-        0,
+        zoneTop,
         0,
         0,
         boss.bulletDamage,
         'enemy',
         'zone',
       );
-      hazard.initZone(left, right, index);
+      hazard.initZone(left, right, index, zoneTop);
       return hazard;
     });
   }

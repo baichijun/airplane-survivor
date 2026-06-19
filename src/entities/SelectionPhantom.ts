@@ -1,4 +1,9 @@
-import { GAME_WIDTH, GAME_HEIGHT, PLAYER_MARGIN } from '../config/balance';
+import {
+  GAME_WIDTH,
+  GAME_HEIGHT,
+  PLAYER_MARGIN,
+  selectionCardBottomY,
+} from '../config/balance';
 import type { Input } from '../core/Input';
 import type { Player } from './Player';
 import { drawPlayerShip } from '../ui/ShipSprites';
@@ -17,9 +22,23 @@ export class SelectionPhantom {
     this.hitRadius = hitRadius;
   }
 
-  /** 在自机当前位置生成幻影 */
+  /**
+   * 在自机位置生成幻影；若自机中心高于选项卡下沿（处于卡片区域内），
+   * 则改生成在屏幕中央，避免一进入界面就误选。
+   */
   static spawnAt(player: Player): SelectionPhantom {
-    return new SelectionPhantom(player.x, player.y, player.speed, player.hitRadius);
+    const cardBottom = selectionCardBottomY();
+    let x = player.x;
+    let y = player.y;
+
+    if (player.y < cardBottom) {
+      x = GAME_WIDTH / 2;
+      y = GAME_HEIGHT / 2;
+    }
+
+    x = Math.max(PLAYER_MARGIN, Math.min(GAME_WIDTH - PLAYER_MARGIN, x));
+    y = Math.max(PLAYER_MARGIN, Math.min(GAME_HEIGHT - PLAYER_MARGIN, y));
+    return new SelectionPhantom(x, y, player.speed, player.hitRadius);
   }
 
   update(dt: number, input: Input): void {

@@ -17,7 +17,7 @@ export class BossSystem {
   }
 
   get isBossActive(): boolean {
-    return this.boss !== null && this.boss.active;
+    return this.boss !== null && this.boss.isCollidable;
   }
 
   /** 尝试生成 Boss，返回新生成的 Boss */
@@ -35,9 +35,9 @@ export class BossSystem {
   }
 
   update(dt: number, playerX: number, playerY: number): void {
-    if (this.boss?.active) {
+    if (this.boss?.isCollidable) {
       this.boss.update(dt, playerX, playerY);
-    } else if (this.boss && !this.boss.active) {
+    } else if (this.boss && !this.boss.active && !this.boss.isDying) {
       this.boss = null;
     }
   }

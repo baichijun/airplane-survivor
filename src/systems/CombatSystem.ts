@@ -7,6 +7,7 @@ import {
   BOSS_BULLET_SPEED,
   BOSS_DOWN_LONG_ANGLE_OFFSETS,
   BOSS_LASER_ORIGIN_SPAN_RATIO,
+  BOSS_LASER_STAGGER_INTERVAL,
   BOSS_RADIAL_BULLET_COUNT,
   BOSS_RADIAL_SPEED_MULT,
   BOSS_SCATTER_ANGLE,
@@ -79,9 +80,46 @@ export class CombatSystem {
   /** Boss 攻击：旧版四模式 + 新版三种状态机模式并行 */
   updateBossAttack(boss: Boss, dt: number): Bullet[] {
     const bullets: Bullet[] = [];
-    bullets.push(...this.fireBoss(boss));
+    bullets.push(...this.updateBossLaserBurst(boss, dt));
+    if (!boss.laserBurstActive) {
+      bullets.push(...this.fireBoss(boss));
+    }
     bullets.push(...boss.attackSystem.update(dt, boss));
     return bullets;
+  }
+
+  /** Boss 激光：每条间隔 0.1 秒依次发射（含预瞄线） */
+  private updateBossLaserBurst(boss: Boss, dt: number): Bullet[] {
+    if (!boss.laserBurstActive) return [];
+
+    boss.laserBurstTimer += dt;
+    const bullets: Bullet[] = [];
+
+    while (
+      boss.laserBurstFired < boss.laserBurstTotal &&
+      boss.laserBurstTimer >= BOSS_LASER_STAGGER_INTERVAL * boss.laserBurstFired
+    ) {
+      bullets.push(
+        this.createBossLaser(boss, boss.laserBurstFired, boss.laserBurstTotal),
+      );
+      boss.laserBurstFired += 1;
+    }
+
+    if (boss.laserBurstFired >= boss.laserBurstTotal) {
+      boss.laserBurstActive = false;
+    }
+
+    return bullets;
+  }
+
+  private createBossLaser(boss: Boss, index: number, total: number): Bullet {
+    const sy = boss.y + boss.height / 2;
+    const span = boss.width * BOSS_LASER_ORIGIN_SPAN_RATIO;
+    const t = total === 1 ? 0.5 : index / (total - 1);
+    const sx = boss.x - span / 2 + span * t;
+    const laser = new Bullet(sx, sy, 0, 0, boss.bulletDamage, 'enemy', 'laser');
+    laser.initLaserLine(sx, sy, boss.targetX - sx, boss.targetY - sy);
+    return laser;
   }
 
   /** Boss 旧版多模式攻击（散弹 / 激光 / 环形 / 垂直侧翼，每次随机） */
@@ -114,16 +152,7 @@ export class CombatSystem {
         );
       }
     } else if (pattern === 1) {
-      const laserCount = bossLaserCount(boss.bossIndex);
-      const sy = boss.y + boss.height / 2;
-      const span = boss.width * BOSS_LASER_ORIGIN_SPAN_RATIO;
-      for (let i = 0; i < laserCount; i++) {
-        const t = laserCount === 1 ? 0.5 : i / (laserCount - 1);
-        const sx = boss.x - span / 2 + span * t;
-        const laser = new Bullet(sx, sy, 0, 0, dmg, 'enemy', 'laser');
-        laser.initLaserLine(sx, sy, boss.targetX - sx, boss.targetY - sy);
-        bullets.push(laser);
-      }
+      boss.startLaserBurst(bossLaserCount(boss.bossIndex));
     } else if (pattern === 2) {
       for (let i = 0; i < BOSS_RADIAL_BULLET_COUNT; i++) {
         const angle = (Math.PI * 2 * i) / BOSS_RADIAL_BULLET_COUNT + Math.PI / 2;

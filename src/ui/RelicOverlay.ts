@@ -1,12 +1,10 @@
 import type { RelicRewardOption } from '../types';
-import { GAME_WIDTH, GAME_HEIGHT, LEVEL_UP_SELECT_DWELL } from '../config/balance';
+import { GAME_WIDTH, GAME_HEIGHT, LEVEL_UP_SELECT_DWELL, OVERLAY_TITLE_Y, SELECTION_CARD_H, SELECTION_CARD_Y } from '../config/balance';
 import { wrapCanvasText, drawWrappedCenterText } from '../config/upgradeDisplay';
 import { UI, drawSelectionCard, fontBody, fontDisplay } from './theme';
 
 /** 宝物选项卡片宽度（像素） */
 const CARD_W = 112;
-/** 宝物选项卡片高度（像素） */
-const CARD_H = 136;
 /** 宝物选项卡片之间的间距（像素） */
 const CARD_GAP = 8;
 
@@ -95,7 +93,7 @@ export class RelicOverlay {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.warn;
     ctx.font = fontDisplay(20, 900);
-    ctx.fillText('BOSS DOWN', GAME_WIDTH / 2, 68);
+    ctx.fillText('击败 BOSS', GAME_WIDTH / 2, OVERLAY_TITLE_Y);
     ctx.fillStyle = UI.textMuted;
     ctx.font = fontBody(12);
     ctx.fillText('选择宝物 · 操控幻影飞入或点击', GAME_WIDTH / 2, 94);
@@ -113,14 +111,16 @@ export class RelicOverlay {
       drawSelectionCard(ctx, card.x, card.y, card.w, card.h, isHovered, accent, isSkip);
 
       const cx = card.x + card.w / 2;
-      let ty = card.y + 16;
 
       if (card.option.kind === 'relic') {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.font = 'bold 22px sans-serif';
         ctx.fillStyle = UI.text;
-        ctx.fillText(card.option.relic.icon, cx, ty);
-        ty += 28;
+        ctx.fillText(card.option.relic.icon, cx, card.y + 30);
+        let ty = card.y + 44;
 
+        ctx.textBaseline = 'top';
         ctx.font = fontBody(13, true);
         const nameLines = wrapCanvasText(ctx, card.option.relic.name, textW);
         ty += drawWrappedCenterText(ctx, nameLines, cx, ty, 15) + 4;
@@ -130,13 +130,16 @@ export class RelicOverlay {
         const descLines = wrapCanvasText(ctx, card.option.relic.description, textW);
         drawWrappedCenterText(ctx, descLines.slice(0, 4), cx, ty, 12);
       } else {
-        ctx.font = fontDisplay(22, 900);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 22px sans-serif';
         ctx.fillStyle = '#f97316';
-        ctx.fillText('✚', cx, ty);
-        ty += 28;
+        ctx.fillText('✚', cx, card.y + 30);
 
+        ctx.textBaseline = 'top';
         ctx.fillStyle = UI.text;
         ctx.font = fontBody(13, true);
+        let ty = card.y + 44;
         const nameLines = wrapCanvasText(ctx, card.option.name, textW);
         ty += drawWrappedCenterText(ctx, nameLines, cx, ty, 15) + 4;
 
@@ -164,13 +167,13 @@ export class RelicOverlay {
   private buildCards(): void {
     const totalW = this.options.length * CARD_W + (this.options.length - 1) * CARD_GAP;
     const startX = (GAME_WIDTH - totalW) / 2;
-    const y = 118;
+    const y = SELECTION_CARD_Y;
 
     this.cards = this.options.map((option, i) => ({
       x: startX + i * (CARD_W + CARD_GAP),
       y,
       w: CARD_W,
-      h: CARD_H,
+      h: SELECTION_CARD_H,
       option,
     }));
   }

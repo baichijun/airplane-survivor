@@ -5,6 +5,8 @@ import { drawEnemyShip } from '../ui/ShipSprites';
 /** 敌机实体 */
 export class Enemy {
   active = true;
+  /** 击破动画播放中：不参与碰撞，但仍保留在场景内 */
+  isDying = false;
   type: EnemyType;
   x: number;
   y: number;
@@ -13,6 +15,8 @@ export class Enemy {
   speed: number;
   attackSpeed: number;
   bulletDamage: number;
+  /** 生成时的基础子弹伤害（不含 Boss 狂暴加成） */
+  baseBulletDamage: number;
   aimType: BulletAimType;
   bulletShape: BulletShape;
   hitRadius: number;
@@ -37,7 +41,8 @@ export class Enemy {
     this.maxHp = maxHp;
     this.speed = cfg.speed;
     this.attackSpeed = cfg.attackSpeed;
-    this.bulletDamage = scaledEnemyBulletDamage(type, elapsedSec);
+    this.baseBulletDamage = scaledEnemyBulletDamage(type, elapsedSec);
+    this.bulletDamage = this.baseBulletDamage;
     this.aimType = cfg.aimType;
     this.bulletShape = cfg.bulletShape;
     this.hitRadius = cfg.hitRadius;
@@ -55,8 +60,12 @@ export class Enemy {
     return Math.random() < 0.5 ? 4 : 5;
   }
 
+  get isCollidable(): boolean {
+    return this.active && !this.isDying;
+  }
+
   update(dt: number, playerX: number, playerY: number, speedMult = 1): void {
-    if (!this.active) return;
+    if (!this.isCollidable) return;
     this.targetX = playerX;
     this.targetY = playerY;
     this.y += this.speed * speedMult * dt;
@@ -71,13 +80,39 @@ export class Enemy {
     this.attackTimer = 0;
   }
 
-  takeDamage(amount: number): void {
+  /** 应用 Boss 狂暴伤害加成（基于生成时基础伤害重算） */
+  applyBerserkBonus(bonus: number): void {
+    this.bulletDamage = this.baseBulletDamage + bonus;
+  }
+
+  /** 受到伤害；返回是否本次击破 */
+  takeDamage(amount: number): boolean {
+    if (this.isDying) return false;
     this.hp -= amount;
-    if (this.hp <= 0) this.active = false;
+    if (this.hp <= 0) {
+      this.beginDefeat();
+      return true;
+    }
+    return false;
+  }
+
+  beginDefeat(): void {
+    if (this.isDying) return;
+    this.isDying = true;
+    this.hp = 0;
+  }
+
+  finishDefeat(): void {
+    this.isDying = false;
+    this.active = false;
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    if (!this.active) return;
+    if (!this.active && !this.isDying) return;
+    if (this.isDying) {
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+    }
     const hw = this.width / 2;
     const hh = this.height / 2;
 
@@ -90,5 +125,7 @@ export class Enemy {
     ctx.fillRect(this.x - hw, this.y - hh - 6, barW, barH);
     ctx.fillStyle = '#ef4444';
     ctx.fillRect(this.x - hw, this.y - hh - 6, barW * ratio, barH);
+
+    if (this.isDying) ctx.restore();
   }
 }

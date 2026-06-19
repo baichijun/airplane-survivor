@@ -31,19 +31,19 @@ export function getEnemyCap(elapsedSec: number, bossesDefeated: number): number 
 /** 玩家初始属性 */
 export const PLAYER_INITIAL = {
   /** 最大生命值 */
-  maxHp: 8,
+  maxHp: 4,
   /** 移动速度（像素/秒） */
-  speed: 200,
+  speed: 240,
   /** 射击间隔（秒，越小攻速越快） */
-  attackSpeed: 0.4,
+  attackSpeed: 0.4 / 1.2,
   /** 单发子弹伤害 */
-  bulletDamage: 1,
+  bulletDamage: 1 * 0.7 * 0.9,
   /** 碰撞判定半径（像素） */
   hitRadius: 14,
   /** 同时发射的弹道数 */
   bulletCount: 1,
   /** 子弹飞行速度（像素/秒） */
-  bulletSpeed: 300,
+  bulletSpeed: 240,
 };
 
 /** 玩家可移动区域距屏幕边缘的最小距离（像素） */
@@ -55,6 +55,9 @@ export const HUD_BOTTOM_PAD = 12;
 export const HUD_BAR_HEIGHT = 10;
 /** 进度条与上方文字标签的间距 */
 export const HUD_TEXT_BAR_GAP = 2;
+/** 升级/宝物界面标题 baseline Y（与 LevelUpOverlay、RelicOverlay 一致） */
+export const OVERLAY_TITLE_Y = 68;
+
 /** 文字标签与虚拟摇杆之间的间距 */
 export const HUD_TEXT_JOYSTICK_GAP = 5;
 /** 底部 HUD 文字字号（需与 HUD 绘制字体一致） */
@@ -282,6 +285,19 @@ export const BOSS_FIRST_SPAWN_TIME = 30;
 /** 击杀一只 Boss 后，下一只 Boss 出现的间隔（秒） */
 export const BOSS_RESPAWN_INTERVAL = 30;
 
+/** Boss 出现后首次狂暴延迟（秒） */
+export const BOSS_BERSERK_DELAY = 60;
+/** 狂暴提示闪烁次数 */
+export const BOSS_BERSERK_FLASH_COUNT = 3;
+/** 每次闪烁显示时长（秒） */
+export const BOSS_BERSERK_FLASH_ON = 0.5;
+/** 闪烁间隔（秒） */
+export const BOSS_BERSERK_FLASH_OFF = 0.3;
+/** 狂暴激活后，每经过该秒数伤害再 +1 */
+export const BOSS_BERSERK_STACK_INTERVAL = 30;
+/** 每次狂暴叠加的敌机子弹伤害 */
+export const BOSS_BERSERK_DAMAGE_STEP = 1;
+
 /** Boss 横向移动速度（像素/秒） */
 export const BOSS_MOVE_SPEED = 90;
 
@@ -293,6 +309,24 @@ export const BOSS_WIDTH = 100;
 
 /** Boss 碰撞体显示高度（像素） */
 export const BOSS_HEIGHT = 56;
+
+/** 自机在 Boss 下方时的额外垂直间距（避免贴边碰撞判定） */
+export const BOSS_PLAYER_Y_GAP = 2;
+
+/** 升级/宝物选项卡顶边 Y（与 LevelUpOverlay、RelicOverlay 一致） */
+export const SELECTION_CARD_Y = 118;
+/** 升级/宝物选项卡高度（像素） */
+export const SELECTION_CARD_H = 136;
+
+/** 升级/宝物选项卡底边 Y */
+export function selectionCardBottomY(): number {
+  return SELECTION_CARD_Y + SELECTION_CARD_H;
+}
+
+/** 自机可移动的最小 Y（始终限制在 Boss 下方） */
+export function playerMinY(hitRadius: number): number {
+  return BOSS_Y + BOSS_HEIGHT / 2 + hitRadius + BOSS_PLAYER_Y_GAP;
+}
 
 /** 与 Boss 接触时受到的伤害 */
 export const BOSS_CONTACT_DAMAGE = 2;
@@ -348,6 +382,9 @@ export const RELIC_KINETIC_SHIELD_CD_REDUCTION = 1;
 /** 经验增幅宝物：经验获取倍率（1.4 = +40%） */
 export const RELIC_EXP_MULTIPLIER = 1.4;
 
+/** Boss 多道激光依次发射间隔（秒） */
+export const BOSS_LASER_STAGGER_INTERVAL = 0.1;
+
 /** 敌机子弹飞行速度（像素/秒） */
 export const ENEMY_BULLET_SPEED = 200;
 
@@ -384,6 +421,11 @@ export const BOSS_DOWN_LONG_ANGLE_OFFSETS = [-0.4, 0, 0.4] as const;
 /** Boss 侧翼圆弹相对中心的横向偏移（像素） */
 export const BOSS_SIDE_BULLET_OFFSET_X = 30;
 
+/** 前两只 Boss 相对计算生命的倍率（第三只及以后为 1） */
+export const BOSS_EARLY_HP_MULT = 0.65;
+/** 享受 BOSS_EARLY_HP_MULT 的最大 Boss 序号（含） */
+export const BOSS_EARLY_HP_MAX_INDEX = 2;
+
 /**
  * Boss 最大生命值：与生成时游戏时长、Boss 序号相关
  * 基础随时间增长，序号提供指数级缩放
@@ -392,7 +434,11 @@ export function bossMaxHp(spawnTimeSec: number, bossIndex: number): number {
   const timeFactor = 50 + spawnTimeSec * 2.2;
   const indexFactor = 1 + (bossIndex - 1) * 0.35;
   const exponential = Math.pow(1.15, bossIndex - 1);
-  return Math.floor(timeFactor * indexFactor * exponential);
+  let hp = Math.floor(timeFactor * indexFactor * exponential);
+  if (bossIndex <= BOSS_EARLY_HP_MAX_INDEX) {
+    hp = Math.floor(hp * BOSS_EARLY_HP_MULT);
+  }
+  return Math.max(1, hp);
 }
 
 /** Boss 子弹伤害：随 Boss 序号提升 */
@@ -412,5 +458,5 @@ export function bossScatterBulletCount(bossIndex: number): number {
 
 /** 第 n 只 Boss 同时发射的激光道数 */
 export function bossLaserCount(bossIndex: number): number {
-  return bossIndex;
+  return bossIndex+2;
 }

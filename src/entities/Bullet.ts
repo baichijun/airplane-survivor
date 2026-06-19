@@ -43,6 +43,8 @@ export class Bullet {
   zoneLeft = 0;
   /** 区域攻击：右边界（像素） */
   zoneRight = 0;
+  /** 区域攻击：上边界（Boss 舰体下沿） */
+  zoneTop = 0;
   /** 区域索引（0–4，用于视觉变化） */
   zoneIndex = 0;
   zoneHitApplied = false;
@@ -102,7 +104,7 @@ export class Bullet {
     this.lineY2 = startY + ny * t;
   }
 
-  initZone(left: number, right: number, index = 0): void {
+  initZone(left: number, right: number, index = 0, top = 0): void {
     this.shape = 'zone';
     this.phase = 'warning';
     this.phaseTimer = 0;
@@ -110,6 +112,8 @@ export class Bullet {
     this.zoneLeft = left;
     this.zoneRight = right;
     this.zoneIndex = index;
+    this.zoneTop = top;
+    this.y = top;
   }
 
   update(dt: number, gameWidth: number, gameHeight: number, homingTargets?: { x: number; y: number }[]): void {
@@ -260,21 +264,27 @@ export class Bullet {
     };
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
+  draw(ctx: CanvasRenderingContext2D, drawOpacity = 1): void {
     if (!this.active) return;
+
+    ctx.save();
+    ctx.globalAlpha = drawOpacity;
 
     if (this.shape === 'laser') {
       this.drawLaser(ctx);
+      ctx.restore();
       return;
     }
 
     if (this.shape === 'zone') {
       this.drawZone(ctx);
+      ctx.restore();
       return;
     }
 
     if (this.shape === 'long') {
       this.drawLong(ctx);
+      ctx.restore();
       return;
     }
 
@@ -290,6 +300,7 @@ export class Bullet {
       ctx.fillStyle = '#a855f7';
     }
     ctx.fill();
+    ctx.restore();
   }
 
   private drawLong(ctx: CanvasRenderingContext2D): void {
@@ -349,17 +360,19 @@ export class Bullet {
   private drawZone(ctx: CanvasRenderingContext2D): void {
     const left = this.zoneLeft;
     const width = this.zoneRight - this.zoneLeft;
+    const top = this.zoneTop;
+    const height = GAME_HEIGHT - top;
     const cx = left + width / 2;
     const t = this.phaseTimer;
     const seed = this.zoneIndex * 1.618;
 
     if (this.isZoneWarningVisible()) {
-      this.drawZoneWarning(ctx, left, width, cx, t, seed);
+      this.drawZoneWarning(ctx, left, width, top, height, cx, t, seed);
       return;
     }
 
     if (this.isZoneActive()) {
-      this.drawZoneActive(ctx, left, width, cx, t, seed);
+      this.drawZoneActive(ctx, left, width, top, height, cx, t, seed);
     }
   }
 
@@ -368,31 +381,31 @@ export class Bullet {
     ctx: CanvasRenderingContext2D,
     left: number,
     width: number,
+    top: number,
+    height: number,
     cx: number,
     t: number,
     seed: number,
   ): void {
     const progress = Math.min(1, t / BOSS_ZONE_WARNING_DURATION);
     const pulse = 0.55 + Math.sin(t * 14 + seed) * 0.2;
-    const scanY = progress * GAME_HEIGHT;
+    const scanY = top + progress * height;
 
-    // 暗色底 + 纵向渐变
-    const bg = ctx.createLinearGradient(left, 0, left + width, GAME_HEIGHT);
+    const bg = ctx.createLinearGradient(left, top, left + width, top + height);
     bg.addColorStop(0, `rgba(251, 191, 36, ${0.06 + progress * 0.06})`);
     bg.addColorStop(0.5, `rgba(244, 63, 94, ${0.1 + pulse * 0.08})`);
     bg.addColorStop(1, `rgba(6, 10, 20, ${0.15 + progress * 0.1})`);
     ctx.fillStyle = bg;
-    ctx.fillRect(left, 0, width, GAME_HEIGHT);
+    ctx.fillRect(left, top, width, height);
 
-    // 斜向全息网格
     ctx.save();
     ctx.beginPath();
-    ctx.rect(left, 0, width, GAME_HEIGHT);
+    ctx.rect(left, top, width, height);
     ctx.clip();
     ctx.strokeStyle = `rgba(251, 191, 36, ${0.12 + pulse * 0.1})`;
     ctx.lineWidth = 1;
     const gridOff = (t * 48 + seed * 20) % 24;
-    for (let y = -24 + gridOff; y < GAME_HEIGHT + 24; y += 24) {
+    for (let y = top - 24 + gridOff; y < top + height + 24; y += 24) {
       ctx.beginPath();
       ctx.moveTo(left, y);
       ctx.lineTo(left + width, y + width * 0.35);
@@ -400,7 +413,6 @@ export class Bullet {
     }
     ctx.restore();
 
-    // 扫描光束
     const scanGrad = ctx.createLinearGradient(left, scanY - 28, left, scanY + 28);
     scanGrad.addColorStop(0, 'rgba(34, 211, 238, 0)');
     scanGrad.addColorStop(0.45, 'rgba(34, 211, 238, 0.55)');
@@ -410,33 +422,29 @@ export class Bullet {
     ctx.fillStyle = scanGrad;
     ctx.fillRect(left, scanY - 28, width, 56);
 
-    // 角标锁定框
     const inset = 6;
     const bracket = Math.min(18, width * 0.22);
     ctx.strokeStyle = `rgba(251, 191, 36, ${0.65 + pulse * 0.3})`;
     ctx.lineWidth = 2;
     ctx.lineCap = 'square';
-    this.strokeZoneBrackets(ctx, left + inset, inset, width - inset * 2, GAME_HEIGHT - inset * 2, bracket);
+    this.strokeZoneBrackets(ctx, left + inset, top + inset, width - inset * 2, height - inset * 2, bracket);
 
-    // 中心瞄准线
     ctx.setLineDash([6, 5]);
     ctx.strokeStyle = `rgba(244, 63, 94, ${0.35 + pulse * 0.25})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(cx, 8);
-    ctx.lineTo(cx, GAME_HEIGHT - 8);
+    ctx.moveTo(cx, top + 8);
+    ctx.lineTo(cx, top + height - 8);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 顶部警示条
     ctx.fillStyle = `rgba(251, 191, 36, ${0.55 + pulse * 0.25})`;
-    ctx.fillRect(left, 0, width, 3);
+    ctx.fillRect(left, top, width, 3);
 
-    // 向下箭头（闪烁）
     const chevronAlpha = 0.45 + Math.sin(t * 18) * 0.35;
     ctx.fillStyle = `rgba(251, 191, 36, ${chevronAlpha})`;
     for (let i = 0; i < 3; i += 1) {
-      const cy = 22 + i * 14 + Math.sin(t * 10 + i) * 2;
+      const cy = top + 10 + i * 14 + Math.sin(t * 10 + i) * 2;
       ctx.beginPath();
       ctx.moveTo(cx - 7, cy - 4);
       ctx.lineTo(cx + 7, cy - 4);
@@ -451,6 +459,8 @@ export class Bullet {
     ctx: CanvasRenderingContext2D,
     left: number,
     width: number,
+    top: number,
+    height: number,
     cx: number,
     t: number,
     seed: number,
@@ -460,34 +470,31 @@ export class Bullet {
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(left, 0, width, GAME_HEIGHT);
+    ctx.rect(left, top, width, height);
     ctx.clip();
 
-    // 核心光柱
     const coreW = Math.max(8, width * 0.28);
-    const coreGrad = ctx.createLinearGradient(cx - coreW, 0, cx + coreW, 0);
+    const coreGrad = ctx.createLinearGradient(cx - coreW, top, cx + coreW, top);
     coreGrad.addColorStop(0, 'rgba(244, 63, 94, 0)');
     coreGrad.addColorStop(0.35, `rgba(232, 121, 249, ${0.45 * flicker})`);
     coreGrad.addColorStop(0.5, `rgba(255, 255, 255, ${0.75 * flicker})`);
     coreGrad.addColorStop(0.65, `rgba(232, 121, 249, ${0.45 * flicker})`);
     coreGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
     ctx.fillStyle = coreGrad;
-    ctx.fillRect(left, 0, width, GAME_HEIGHT);
+    ctx.fillRect(left, top, width, height);
 
-    // 外层辉光
-    const glowGrad = ctx.createLinearGradient(left, 0, left + width, 0);
+    const glowGrad = ctx.createLinearGradient(left, top, left + width, top);
     glowGrad.addColorStop(0, 'rgba(244, 63, 94, 0)');
     glowGrad.addColorStop(0.5, `rgba(244, 63, 94, ${0.38 * flicker})`);
     glowGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
     ctx.fillStyle = glowGrad;
-    ctx.fillRect(left, 0, width, GAME_HEIGHT);
+    ctx.fillRect(left, top, width, height);
 
-    // 下落等离子流
     const streamCount = Math.max(3, Math.floor(width / 14));
     for (let i = 0; i < streamCount; i += 1) {
       const sx = left + ((i + 0.5) / streamCount) * width;
       const phase = t * 220 + i * 37 + seed * 11;
-      const headY = (phase % (GAME_HEIGHT + 60)) - 30;
+      const headY = top + (phase % (height + 60)) - 30;
       const streamGrad = ctx.createLinearGradient(sx, headY - 40, sx, headY + 12);
       streamGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
       streamGrad.addColorStop(0.6, `rgba(34, 211, 238, ${0.55 * flicker})`);
@@ -500,11 +507,10 @@ export class Bullet {
       ctx.stroke();
     }
 
-    // 电弧纹理
     ctx.strokeStyle = `rgba(255, 255, 255, ${0.18 * flicker})`;
     ctx.lineWidth = 1;
     for (let i = 0; i < 4; i += 1) {
-      const ay = ((t * 140 + i * 90 + seed * 30) % (GAME_HEIGHT + 40)) - 20;
+      const ay = top + ((t * 140 + i * 90 + seed * 30) % (height + 40)) - 20;
       ctx.beginPath();
       ctx.moveTo(left + 4, ay);
       ctx.lineTo(cx, ay + 8);
@@ -512,23 +518,21 @@ export class Bullet {
       ctx.stroke();
     }
 
-    // 边缘能量框
     ctx.strokeStyle = `rgba(34, 211, 238, ${0.55 + progress * 0.25})`;
     ctx.lineWidth = 2;
     ctx.shadowColor = 'rgba(34, 211, 238, 0.6)';
     ctx.shadowBlur = 8;
-    ctx.strokeRect(left + 1, 1, width - 2, GAME_HEIGHT - 2);
+    ctx.strokeRect(left + 1, top + 1, width - 2, height - 2);
     ctx.shadowBlur = 0;
 
     ctx.restore();
 
-    // 顶部冲击波
     const shockH = 10 + progress * 6;
-    const shockGrad = ctx.createLinearGradient(left, 0, left, shockH);
+    const shockGrad = ctx.createLinearGradient(left, top, left, top + shockH);
     shockGrad.addColorStop(0, `rgba(255, 255, 255, ${0.65 * flicker})`);
     shockGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
     ctx.fillStyle = shockGrad;
-    ctx.fillRect(left, 0, width, shockH);
+    ctx.fillRect(left, top, width, shockH);
   }
 
   private strokeZoneBrackets(

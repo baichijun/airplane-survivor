@@ -21,7 +21,7 @@ export class SpawnSystem {
 
   update(dt: number, enemies: Enemy[], maxCap = ENEMY_CAP_INITIAL): Enemy | null {
     this.elapsedSec += dt;
-    if (enemies.filter((e) => e.active).length >= maxCap) return null;
+    if (enemies.filter((e) => e.isCollidable).length >= maxCap) return null;
 
     this.spawnTimer += dt;
     const interval = this.getSpawnInterval();

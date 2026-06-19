@@ -49,6 +49,8 @@ export class Player {
   mode: GameMode = 'normal';
   /** 简单模式：生命恢复计时 */
   regenTimer = 0;
+  /** 自机被击破动画播放中 */
+  isDying = false;
   readonly drones: [Drone, Drone];
   readonly relics = new Set<RelicId>();
 
@@ -93,6 +95,7 @@ export class Player {
     this.droneAttackSpeedMult = 1;
     this.kineticHitCounter = 0;
     this.regenTimer = 0;
+    this.isDying = false;
     this.relics.clear();
     for (const drone of this.drones) drone.reset();
   }
@@ -145,8 +148,9 @@ export class Player {
     this.y = Math.max(minY, Math.min(GAME_HEIGHT - PLAYER_MARGIN, this.y));
   }
 
-  update(dt: number, input: Input): void {
-    this.applyMovement(dt, input, GAME_HEIGHT * 0.4);
+  update(dt: number, input: Input, minY = PLAYER_MARGIN): void {
+    if (this.isDying) return;
+    this.applyMovement(dt, input, minY);
     this.tickTimers(dt);
     this.attackTimer += dt;
     for (const drone of this.drones) drone.update(dt, this);
@@ -184,8 +188,14 @@ export class Player {
     return Math.max(1, Math.round(base * this.hpGainMultiplier));
   }
 
+  beginDefeat(): void {
+    if (this.isDying) return;
+    this.isDying = true;
+    this.hp = 0;
+  }
+
   takeDamage(amount: number): boolean {
-    if (this.invincibleTimer > 0 || this.isShieldActive) return false;
+    if (this.isDying || this.invincibleTimer > 0 || this.isShieldActive) return false;
 
     // 被动护盾：冷却完毕时受击自动开盾并格挡本次伤害
     if (this.hasRelic('passiveShield') && this.shieldCooldownTimer <= 0 && this.shieldActiveTimer <= 0) {
@@ -239,6 +249,14 @@ export class Player {
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
+    if (this.isDying) {
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      drawPlayerShip(ctx, this.x, this.y, this.hitRadius);
+      ctx.restore();
+      return;
+    }
+
     for (const drone of this.drones) drone.draw(ctx, this);
 
     if (this.isShieldActive) {

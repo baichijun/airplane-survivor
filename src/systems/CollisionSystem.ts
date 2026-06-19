@@ -5,6 +5,7 @@ import type { Player } from '../entities/Player';
 import {
   BOSS_CONTACT_DAMAGE,
   CONTACT_DAMAGE,
+  GAME_HEIGHT,
   LASER_BEAM_WIDTH,
   RELIC_RICOCHET_CHANCE,
 } from '../config/balance';
@@ -77,23 +78,23 @@ export class CollisionSystem {
       if (!bullet.active) continue;
 
       if (bullet.owner === 'player') {
-        if (boss?.active && bullet.active && this.playerBulletHitsBoss(bullet, boss)) {
-          boss.takeDamage(bullet.damage);
+        if (boss?.isCollidable && bullet.active && this.playerBulletHitsBoss(bullet, boss)) {
+          const justKilled = boss.takeDamage(bullet.damage);
           bullet.active = false;
-          if (!boss.active) bossKilled = true;
+          if (justKilled) bossKilled = true;
         }
 
         for (const enemy of enemies) {
           if (!bullet.active) break;
-          if (!enemy.active) continue;
+          if (!enemy.isCollidable) continue;
           if (bullet.hitEnemies.has(enemy)) continue;
           if (this.playerBulletHitsEnemy(bullet, enemy)) {
             // 先结算击中伤害，再判定弹射
-            enemy.takeDamage(bullet.damage);
+            const justKilled = enemy.takeDamage(bullet.damage);
             bullet.hitEnemies.add(enemy);
             player.onEnemyHit();
             this.handlePlayerBulletHitEnemy(bullet, player, enemy, enemies);
-            if (!enemy.active) killedEnemies.push(enemy);
+            if (justKilled) killedEnemies.push(enemy);
           }
         }
       } else if (this.enemyBulletHitsPlayer(bullet, player)) {
@@ -126,15 +127,15 @@ export class CollisionSystem {
     }
 
     for (const enemy of enemies) {
-      if (!enemy.active) continue;
+      if (!enemy.isCollidable) continue;
       if (rectCircleOverlap(enemy.x, enemy.y, enemy.width, enemy.height, player.x, player.y, player.hitRadius)) {
         if (player.takeDamage(CONTACT_DAMAGE)) playerHit = true;
-        enemy.active = false;
+        enemy.beginDefeat();
         killedEnemies.push(enemy);
       }
     }
 
-    if (boss?.active) {
+    if (boss?.isCollidable) {
       if (rectCircleOverlap(boss.x, boss.y, boss.width, boss.height, player.x, player.y, player.hitRadius)) {
         if (player.takeDamage(BOSS_CONTACT_DAMAGE)) playerHit = true;
       }
@@ -158,7 +159,7 @@ export class CollisionSystem {
       Math.random() < RELIC_RICOCHET_CHANCE
     ) {
       const others = enemies.filter(
-        (e) => e.active && e !== hitEnemy && !bullet.hitEnemies.has(e),
+        (e) => e.isCollidable && e !== hitEnemy && !bullet.hitEnemies.has(e),
       );
       if (others.length > 0) {
         const target = others[Math.floor(Math.random() * others.length)];
@@ -232,7 +233,17 @@ export class CollisionSystem {
   }
 
   private playerInZone(bullet: Bullet, player: Player): boolean {
-    return player.x >= bullet.zoneLeft && player.x <= bullet.zoneRight;
+    const w = bullet.zoneRight - bullet.zoneLeft;
+    const h = GAME_HEIGHT - bullet.zoneTop;
+    return rectCircleOverlap(
+      (bullet.zoneLeft + bullet.zoneRight) / 2,
+      bullet.zoneTop + h / 2,
+      w,
+      h,
+      player.x,
+      player.y,
+      player.hitRadius,
+    );
   }
 }
 

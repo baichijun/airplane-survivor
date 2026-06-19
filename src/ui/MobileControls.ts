@@ -6,7 +6,7 @@ import {
   hudBarTopY,
   mobileJoystickCenterY,
 } from '../config/balance';
-import { UI, drawGlowCircle, drawShieldIcon, fontBody, fontDisplay } from './theme';
+import { UI, drawGlowCircle, drawShieldIcon, fontDisplay } from './theme';
 
 /** 虚拟按键区域距屏幕边缘的内边距（像素） */
 const PAD = 14;
@@ -18,6 +18,9 @@ const JOYSTICK_BASE_R = 54;
 const JOYSTICK_KNOB_R = 23;
 /** 摇杆中心死区（相对底盘半径） */
 const JOYSTICK_DEAD_ZONE = 0.1;
+
+/** 摇杆与自机重叠时额外判定半径（像素） */
+const JOYSTICK_PLAYER_FADE_EXTRA_R = 20;
 
 /** 移动端虚拟摇杆 + 护盾按钮（浮动摇杆：在左下区域按下时底盘跟随拇指） */
 export class MobileControls {
@@ -40,21 +43,61 @@ export class MobileControls {
     this.knobOffsetY = 0;
   }
 
+  /**
+   * 键盘控制时同步摇杆旋钮视觉（触屏拖拽中不覆盖）。
+   * 优先取自机实际位移方向；未移动时回退为键盘方向。
+   */
+  syncKnobVisual(
+    input: Input,
+    entityX: number,
+    entityY: number,
+    prevX: number,
+    prevY: number,
+    dt: number,
+  ): void {
+    if (this.joystickDragging) return;
+
+    const maxR = JOYSTICK_BASE_R - JOYSTICK_KNOB_R;
+    let targetX = 0;
+    let targetY = 0;
+
+    const kb = input.getKeyboardDirection();
+    if (kb.x !== 0 || kb.y !== 0) {
+      const dx = entityX - prevX;
+      const dy = entityY - prevY;
+      const moved = Math.hypot(dx, dy);
+      if (moved > 0.3) {
+        targetX = (dx / moved) * maxR;
+        targetY = (dy / moved) * maxR;
+      } else {
+        targetX = kb.x * maxR;
+        targetY = kb.y * maxR;
+      }
+    }
+
+    const lerpT = Math.min(1, dt * 18);
+    this.knobOffsetX += (targetX - this.knobOffsetX) * lerpT;
+    this.knobOffsetY += (targetY - this.knobOffsetY) * lerpT;
+
+    if (targetX === 0 && targetY === 0 && Math.hypot(this.knobOffsetX, this.knobOffsetY) < 0.5) {
+      this.knobOffsetX = 0;
+      this.knobOffsetY = 0;
+    }
+  }
+
   /** 每帧根据指针更新虚拟摇杆 */
   updateFromPointer(input: Input): 'shield' | null {
+    this.layoutShieldButton();
+
     if (!input.pointerDown || !input.pointer) {
-      this.resetJoystick();
-      input.setJoystickCaptured(false);
-      input.clearJoystick();
+      this.releasePointerJoystick(input);
       return null;
     }
 
     const { x, y } = input.pointer;
 
     if (this.hitShield(x, y)) {
-      this.resetJoystick();
-      input.setJoystickCaptured(false);
-      input.clearJoystick();
+      this.releasePointerJoystick(input);
       return 'shield';
     }
 
@@ -69,10 +112,18 @@ export class MobileControls {
       return null;
     }
 
-    this.resetJoystick();
+    this.releasePointerJoystick(input);
+    return null;
+  }
+
+  private releasePointerJoystick(input: Input): void {
+    if (this.joystickDragging) {
+      this.joystickDragging = false;
+      this.anchorX = this.defaultCenterX;
+      this.anchorY = this.defaultCenterY;
+    }
     input.setJoystickCaptured(false);
     input.clearJoystick();
-    return null;
   }
 
   hitShield(x: number, y: number): boolean {
@@ -81,18 +132,44 @@ export class MobileControls {
   }
 
   draw(ctx: CanvasRenderingContext2D, player: Player): void {
+    this.layoutShieldButton();
+
+    const fadeJoystick = this.isPlayerNearJoystick(player);
+    ctx.save();
+    if (fadeJoystick) ctx.globalAlpha = 0.2;
     this.drawJoystick(ctx);
+    ctx.restore();
+
+    const fadeShield = this.isPlayerNearShield(player);
+    ctx.save();
+    if (fadeShield) ctx.globalAlpha = 0.2;
     this.drawShieldButton(ctx, player);
+    ctx.restore();
+  }
+
+  private isPlayerNearShield(player: Player): boolean {
+    const b = this.shieldBtn;
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const radius = b.w / 2 + JOYSTICK_PLAYER_FADE_EXTRA_R + player.hitRadius;
+    return (player.x - cx) ** 2 + (player.y - cy) ** 2 <= radius * radius;
+  }
+
+  private isPlayerNearJoystick(player: Player): boolean {
+    const cx = this.anchorX;
+    const cy = this.anchorY;
+    const radius = JOYSTICK_BASE_R + JOYSTICK_PLAYER_FADE_EXTRA_R + player.hitRadius;
+    return (player.x - cx) ** 2 + (player.y - cy) ** 2 <= radius * radius;
   }
 
   private drawJoystick(ctx: CanvasRenderingContext2D): void {
     const cx = this.anchorX;
     const cy = this.anchorY;
-    const dragging = this.joystickDragging && (this.knobOffsetX !== 0 || this.knobOffsetY !== 0);
-    const pulse = dragging ? 0.85 + Math.sin(performance.now() * 0.012) * 0.15 : 1;
+    const knobActive = this.knobOffsetX !== 0 || this.knobOffsetY !== 0;
+    const pulse = knobActive ? 0.85 + Math.sin(performance.now() * 0.012) * 0.15 : 1;
 
     // 外圈光晕
-    drawGlowCircle(ctx, cx, cy, JOYSTICK_BASE_R + 4, UI.accentDim, dragging ? 18 : 10);
+    drawGlowCircle(ctx, cx, cy, JOYSTICK_BASE_R + 4, UI.accentDim, knobActive ? 18 : 10);
 
     // 底盘
     const baseGrad = ctx.createRadialGradient(cx, cy, JOYSTICK_BASE_R * 0.2, cx, cy, JOYSTICK_BASE_R);
@@ -130,7 +207,7 @@ export class MobileControls {
     const knobX = cx + this.knobOffsetX;
     const knobY = cy + this.knobOffsetY;
 
-    if (dragging) {
+    if (knobActive) {
       drawGlowCircle(ctx, knobX, knobY, JOYSTICK_KNOB_R + 2, UI.accentGlow, 14 * pulse);
     }
 
@@ -162,13 +239,17 @@ export class MobileControls {
     ctx.fill();
   }
 
-  private drawShieldButton(ctx: CanvasRenderingContext2D, player: Player): void {
+  private layoutShieldButton(): void {
     const barTop = hudBarTopY();
     const bw = SHIELD_BTN_SIZE;
     const bh = SHIELD_BTN_SIZE;
     const bx = GAME_WIDTH - PAD - bw;
     const by = barTop - bh - 30;
     this.shieldBtn = { x: bx, y: by, w: bw, h: bh };
+  }
+
+  private drawShieldButton(ctx: CanvasRenderingContext2D, player: Player): void {
+    const { x: bx, y: by, w: bw, h: bh } = this.shieldBtn;
 
     const ready = player.shieldCooldownTimer <= 0 && !player.isShieldActive;
     const active = player.isShieldActive;
@@ -235,10 +316,6 @@ export class MobileControls {
       ctx.fillStyle = UI.textMuted;
       ctx.font = fontDisplay(11, 700);
       ctx.fillText(`${Math.ceil(player.shieldCooldownTimer)}s`, cx, by + bh + 3);
-    } else {
-      ctx.fillStyle = UI.accent;
-      ctx.font = fontBody(10, true);
-      ctx.fillText('就绪', cx, by + bh + 4);
     }
   }
 

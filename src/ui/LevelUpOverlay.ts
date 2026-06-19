@@ -1,13 +1,11 @@
 import type { UpgradeDef, UpgradePickCounts } from '../types';
 import type { Player } from '../entities/Player';
-import { GAME_WIDTH, GAME_HEIGHT, LEVEL_UP_SELECT_DWELL } from '../config/balance';
+import { GAME_WIDTH, GAME_HEIGHT, LEVEL_UP_SELECT_DWELL, OVERLAY_TITLE_Y, SELECTION_CARD_H, SELECTION_CARD_Y } from '../config/balance';
 import { getUpgradeStatDisplay, formatUpgradeEffectSummary, wrapCanvasText, drawWrappedCenterText } from '../config/upgradeDisplay';
 import { UI, drawSelectionCard, fontBody, fontDisplay } from './theme';
 
 /** 升级选项卡片宽度（像素） */
 const CARD_W = 112;
-/** 升级选项卡片高度（像素） */
-const CARD_H = 136;
 /** 升级选项卡片之间的间距（像素） */
 const CARD_GAP = 8;
 
@@ -109,10 +107,10 @@ export class LevelUpOverlay {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.accent;
     ctx.font = fontDisplay(20, 900);
-    ctx.fillText('LEVEL UP', GAME_WIDTH / 2, 68);
+    ctx.fillText('LEVEL UP', GAME_WIDTH / 2, OVERLAY_TITLE_Y);
     ctx.fillStyle = UI.textMuted;
     ctx.font = fontBody(12);
-    ctx.fillText('操控幻影飞入选项 · 停留 0.5 秒确认 · 也可点击', GAME_WIDTH / 2, 94);
+    ctx.fillText('点击或操控幻影飞入选项', GAME_WIDTH / 2, 94);
 
     const dwellProgress = this.getDwellProgress();
     const innerPad = 8;
@@ -151,11 +149,14 @@ export class LevelUpOverlay {
 
       ctx.fillStyle = UI.textDim;
       ctx.font = fontBody(10);
-      const valueChange = stat.detail
-        ? `${stat.before} → ${stat.after} · ${stat.detail}`
-        : `${stat.before} → ${stat.after}`;
-      const valueLines = wrapCanvasText(ctx, valueChange, textW);
-      drawWrappedCenterText(ctx, valueLines.slice(0, 2), cx, ty, 12);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${stat.before} → ${stat.after}`, cx, ty);
+      ty += 12;
+
+      if (stat.detail) {
+        ctx.fillText(stat.detail, cx, ty);
+      }
 
       if (isHovered && dwellProgress > 0) {
         const barW = card.w - 16;
@@ -177,13 +178,13 @@ export class LevelUpOverlay {
   private buildCards(): void {
     const totalW = this.options.length * CARD_W + (this.options.length - 1) * CARD_GAP;
     const startX = (GAME_WIDTH - totalW) / 2;
-    const y = 118;
+    const y = SELECTION_CARD_Y;
 
     this.cards = this.options.map((upgrade, i) => ({
       x: startX + i * (CARD_W + CARD_GAP),
       y,
       w: CARD_W,
-      h: CARD_H,
+      h: SELECTION_CARD_H,
       upgrade,
     }));
   }

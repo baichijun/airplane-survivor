@@ -15,6 +15,8 @@ import { drawBossShip } from '../ui/ShipSprites';
 /** Boss 实体：横向移动，多段攻击 */
 export class Boss {
   active = true;
+  /** 击破动画播放中 */
+  isDying = false;
   x: number;
   y: number;
   hp: number;
@@ -30,6 +32,12 @@ export class Boss {
   bulletDamage: number;
   readonly attackSystem = new BossAttackSystem();
 
+  /** 旧版激光连发：是否进行中 */
+  laserBurstActive = false;
+  laserBurstFired = 0;
+  laserBurstTotal = 0;
+  laserBurstTimer = 0;
+
   constructor(spawnTimeSec: number, bossIndex: number) {
     this.bossIndex = bossIndex;
     this.x = GAME_WIDTH / 2;
@@ -41,8 +49,12 @@ export class Boss {
     this.moveDir = Math.random() < 0.5 ? -1 : 1;
   }
 
+  get isCollidable(): boolean {
+    return this.active && !this.isDying;
+  }
+
   update(dt: number, playerX: number, playerY: number): void {
-    if (!this.active) return;
+    if (!this.isCollidable) return;
     this.targetX = playerX;
     this.targetY = playerY;
 
@@ -69,13 +81,41 @@ export class Boss {
     this.attackTimer = 0;
   }
 
-  takeDamage(amount: number): void {
+  startLaserBurst(total: number): void {
+    this.laserBurstActive = true;
+    this.laserBurstFired = 0;
+    this.laserBurstTotal = total;
+    this.laserBurstTimer = 0;
+  }
+
+  /** 受到伤害；返回是否本次击破 */
+  takeDamage(amount: number): boolean {
+    if (this.isDying) return false;
     this.hp -= amount;
-    if (this.hp <= 0) this.active = false;
+    if (this.hp <= 0) {
+      this.beginDefeat();
+      return true;
+    }
+    return false;
+  }
+
+  beginDefeat(): void {
+    if (this.isDying) return;
+    this.isDying = true;
+    this.hp = 0;
+  }
+
+  finishDefeat(): void {
+    this.isDying = false;
+    this.active = false;
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    if (!this.active) return;
+    if (!this.active && !this.isDying) return;
+    if (this.isDying) {
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+    }
     const hh = this.height / 2;
 
     drawBossShip(ctx, this.x, this.y, this.width, this.height, this.bossIndex);
@@ -92,5 +132,7 @@ export class Boss {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`BOSS ${this.bossIndex}`, this.x, this.y - hh - 18);
+
+    if (this.isDying) ctx.restore();
   }
 }

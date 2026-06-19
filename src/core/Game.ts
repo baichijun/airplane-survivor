@@ -10,11 +10,15 @@ import { CombatSystem } from '../systems/CombatSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { ExpSystem } from '../systems/ExpSystem';
 import { BossSystem } from '../systems/BossSystem';
+import { BossBerserkSystem } from '../systems/BossBerserkSystem';
 import { HUD } from '../ui/HUD';
+import { BossBerserkFlash } from '../ui/BossBerserkFlash';
 import { LevelUpOverlay } from '../ui/LevelUpOverlay';
 import { RelicOverlay } from '../ui/RelicOverlay';
 import { GameOverOverlay, MenuOverlay } from '../ui/GameOverOverlay';
 import { MobileControls } from '../ui/MobileControls';
+import { SettingsOverlay } from '../ui/SettingsOverlay';
+import { gameSettings } from '../config/settings';
 import { applyUpgrade, pickRandomUpgrades } from '../config/upgrades';
 import {
   applyRelic,
@@ -30,8 +34,10 @@ import {
   LEVEL_UP_HEAL_BONUS,
   LEVEL_UP_MAX_HP_BONUS,
   getEnemyCap,
+  playerMinY,
 } from '../config/balance';
 import type { GameMode, PauseKind, RelicRewardOption, UpgradeDef, UpgradePickCounts } from '../types';
+import { DefeatExplosion, type DefeatExplosionKind } from '../effects/DefeatExplosion';
 
 /** 背景星空粒子数量 */
 const STAR_COUNT = 30;
@@ -51,6 +57,8 @@ export class Game {
   private combat = new CombatSystem();
   private spawn = new SpawnSystem();
   private bossSystem = new BossSystem();
+  private bossBerserk = new BossBerserkSystem();
+  private bossBerserkFlash = new BossBerserkFlash();
   private exp = new ExpSystem();
   private hud = new HUD();
   private levelUpOverlay = new LevelUpOverlay();
@@ -58,16 +66,21 @@ export class Game {
   private gameOverOverlay = new GameOverOverlay();
   private menuOverlay = new MenuOverlay();
   private mobileControls = new MobileControls();
+  private settingsOverlay = new SettingsOverlay();
 
   private kills = 0;
   private lastTime = 0;
   private wasPointerDown = false;
+  /** 设置面板内拖拽滑条 */
+  private settingsPointerActive = false;
   /** 暂停界面：区分点击选卡与持续按住（摇杆/拖拽） */
   private wasPointerDownPaused = false;
   private pauseKind: PauseKind = 'level_up';
   private upgradePickCounts: UpgradePickCounts = createEmptyPickCounts();
   /** 暂停选奖励时操控的幻影（真实自机保持进入暂停时的位置） */
   private selectionPhantom: SelectionPhantom | null = null;
+  /** 击破爆破动画队列 */
+  private defeatExplosions: DefeatExplosion[] = [];
 
   constructor(canvasId: string) {
     this.engine = new Engine(canvasId);
@@ -89,12 +102,23 @@ export class Game {
   }
 
   private handlePointer(): void {
-    if (this.state === GameState.PLAYING) return;
+    if (this.settingsOverlay.isOpen) {
+      this.handleSettingsPointer();
+      return;
+    }
+
+    if (this.state === GameState.PLAYING) {
+      return;
+    }
 
     if (this.state === GameState.PAUSED) {
       const justPressed = this.input.pointerDown && !this.wasPointerDownPaused;
       this.wasPointerDownPaused = this.input.pointerDown;
       if (justPressed && this.input.pointer) {
+        if (this.settingsOverlay.hitSettingsButton(this.input.pointer.x, this.input.pointer.y)) {
+          this.settingsOverlay.open();
+          return;
+        }
         const { x, y } = this.input.pointer;
         if (this.pauseKind === 'level_up') {
           const chosen = this.levelUpOverlay.hitTest(x, y);
@@ -111,6 +135,11 @@ export class Game {
     if (!ptr) return;
 
     if (this.state === GameState.MENU) {
+      this.settingsOverlay.setButtonPlacement('menu');
+      if (this.settingsOverlay.hitSettingsButton(ptr.x, ptr.y)) {
+        this.settingsOverlay.open();
+        return;
+      }
       const mode = this.menuOverlay.hitTest(ptr.x, ptr.y);
       if (mode) this.startGame(mode);
       return;
@@ -119,6 +148,24 @@ export class Game {
     if (this.state === GameState.GAME_OVER && this.gameOverOverlay.hitTest(ptr.x, ptr.y)) {
       this.state = GameState.MENU;
       return;
+    }
+  }
+
+  private handleSettingsPointer(): void {
+    const ptr = this.input.pointer;
+    if (this.input.pointerDown && ptr) {
+      if (!this.settingsPointerActive) {
+        this.settingsOverlay.handlePointerDown(ptr.x, ptr.y);
+        this.settingsPointerActive = true;
+      } else {
+        this.settingsOverlay.handlePointerMove(ptr.x, ptr.y);
+      }
+      return;
+    }
+
+    if (this.settingsPointerActive) {
+      this.settingsOverlay.handlePointerUp();
+      this.settingsPointerActive = false;
     }
   }
 
@@ -177,16 +224,39 @@ export class Game {
   }
 
   private startGame(mode: GameMode): void {
+    this.settingsOverlay.close();
     this.state = GameState.PLAYING;
     this.player.reset(mode);
     this.bullets = [];
     this.enemies = [];
     this.spawn.reset();
     this.bossSystem.reset();
+    this.bossBerserk.reset();
     this.exp.reset();
     this.kills = 0;
     this.wasPointerDown = false;
     this.upgradePickCounts = createEmptyPickCounts();
+    this.defeatExplosions = [];
+  }
+
+  private spawnDefeatExplosion(
+    cx: number,
+    cy: number,
+    halfW: number,
+    halfH: number,
+    kind: DefeatExplosionKind,
+    onComplete?: () => void,
+  ): void {
+    this.defeatExplosions.push(
+      new DefeatExplosion({ cx, cy, halfW, halfH }, kind, onComplete),
+    );
+  }
+
+  private updateDefeatExplosions(dt: number): void {
+    for (const explosion of this.defeatExplosions) {
+      explosion.update(dt);
+    }
+    this.defeatExplosions = this.defeatExplosions.filter((e) => !e.finished);
   }
 
   private triggerLevelUp(): void {
@@ -213,6 +283,7 @@ export class Game {
   }
 
   private onBossKilled(): void {
+    this.bossBerserk.onBossKilled(this.enemies);
     this.bossSystem.onBossKilled(this.spawn.elapsedSec);
     const need = this.exp.xpRequired - this.exp.currentXp;
     if (need > 0) this.exp.addXp(need);
@@ -231,6 +302,10 @@ export class Game {
   }
 
   private update(dt: number): void {
+    if (this.settingsOverlay.isOpen && this.state === GameState.PAUSED) {
+      return;
+    }
+
     if (this.state === GameState.PLAYING) {
       this.updatePlaying(dt);
     } else if (this.state === GameState.PAUSED) {
@@ -243,7 +318,10 @@ export class Game {
     if (!phantom) return;
 
     this.mobileControls.updateFromPointer(this.input);
+    const prevX = phantom.x;
+    const prevY = phantom.y;
     phantom.update(dt, this.input);
+    this.mobileControls.syncKnobVisual(this.input, phantom.x, phantom.y, prevX, prevY, dt);
 
     if (this.pauseKind === 'level_up') {
       const chosen = this.levelUpOverlay.updateSelection(phantom.x, phantom.y, dt);
@@ -268,16 +346,39 @@ export class Game {
   }
 
   private getHomingTargets(): { x: number; y: number }[] {
-    const targets = this.enemies.filter((e) => e.active).map((e) => ({ x: e.x, y: e.y }));
-    if (this.bossSystem.boss?.active) {
+    const targets = this.enemies
+      .filter((e) => e.isCollidable)
+      .map((e) => ({ x: e.x, y: e.y }));
+    if (this.bossSystem.boss?.isCollidable) {
       targets.push({ x: this.bossSystem.boss.x, y: this.bossSystem.boss.y });
     }
     return targets;
   }
 
   private updatePlaying(dt: number): void {
+    this.updateDefeatExplosions(dt);
+
+    if (this.player.isDying) {
+      this.bullets = this.bullets.filter((b) => b.active);
+      this.enemies = this.enemies.filter((e) => e.isDying || (e.active && e.y < GAME_HEIGHT + 60));
+      if (this.defeatExplosions.length === 0) {
+        this.state = GameState.GAME_OVER;
+      }
+      return;
+    }
+
+    const prevX = this.player.x;
+    const prevY = this.player.y;
     this.updatePlayingControls();
-    this.player.update(dt, this.input);
+    this.player.update(dt, this.input, playerMinY(this.player.hitRadius));
+    this.mobileControls.syncKnobVisual(
+      this.input,
+      this.player.x,
+      this.player.y,
+      prevX,
+      prevY,
+      dt,
+    );
 
     this.exp.tickPassive(dt, getXpMultiplier(this.player));
 
@@ -290,23 +391,30 @@ export class Game {
       this.bossSystem.bossesDefeated,
     );
     const spawned = this.spawn.update(dt, this.enemies, enemyCap);
-    if (spawned) this.enemies.push(spawned);
+    if (spawned) {
+      this.bossBerserk.applyToEnemy(spawned);
+      this.enemies.push(spawned);
+    }
 
     const newBoss = this.bossSystem.trySpawn(this.spawn.elapsedSec);
-    if (newBoss) this.bossSystem.boss = newBoss;
+    if (newBoss) {
+      this.bossSystem.boss = newBoss;
+      this.bossBerserk.onBossSpawn();
+    }
 
     this.bossSystem.update(dt, this.player.x, this.player.y);
+    this.bossBerserk.update(dt, this.bossSystem.isBossActive, this.enemies);
 
     const enemySpeedMult = this.bossSystem.isBossActive ? ENEMY_SPEED_MULT_DURING_BOSS : 1;
     for (const enemy of this.enemies) {
-      if (enemy.active) {
+      if (enemy.isCollidable) {
         enemy.update(dt, this.player.x, this.player.y, enemySpeedMult);
         const eb = this.combat.fireEnemy(enemy);
         if (eb) this.bullets.push(eb);
       }
     }
 
-    if (this.bossSystem.boss?.active) {
+    if (this.bossSystem.boss?.isCollidable) {
       this.bullets.push(...this.combat.updateBossAttack(this.bossSystem.boss, dt));
     }
 
@@ -327,17 +435,37 @@ export class Game {
       this.exp.addXp(xpGain);
       this.kills += 1;
       this.player.onEnemyKilled();
+      this.spawnDefeatExplosion(
+        enemy.x,
+        enemy.y,
+        enemy.width / 2,
+        enemy.height / 2,
+        'enemy',
+        () => enemy.finishDefeat(),
+      );
     }
 
-    if (result.bossKilled) {
-      this.onBossKilled();
+    if (result.bossKilled && this.bossSystem.boss) {
+      const boss = this.bossSystem.boss;
+      this.spawnDefeatExplosion(
+        boss.x,
+        boss.y,
+        boss.width / 2,
+        boss.height / 2,
+        'boss',
+        () => {
+          boss.finishDefeat();
+          this.bossSystem.onBossKilled(this.spawn.elapsedSec);
+          this.onBossKilled();
+        },
+      );
       this.bullets = this.bullets.filter((b) => b.active);
-      this.enemies = this.enemies.filter((e) => e.active && e.y < GAME_HEIGHT + 60);
+      this.enemies = this.enemies.filter((e) => e.isDying || (e.active && e.y < GAME_HEIGHT + 60));
       return;
     }
 
     this.bullets = this.bullets.filter((b) => b.active);
-    this.enemies = this.enemies.filter((e) => e.active && e.y < GAME_HEIGHT + 60);
+    this.enemies = this.enemies.filter((e) => e.isDying || (e.active && e.y < GAME_HEIGHT + 60));
 
     if (this.exp.shouldLevelUp()) {
       this.triggerLevelUp();
@@ -345,42 +473,66 @@ export class Game {
     }
 
     if (this.player.hp <= 0) {
-      this.state = GameState.GAME_OVER;
+      this.player.beginDefeat();
+      this.spawnDefeatExplosion(
+        this.player.x,
+        this.player.y,
+        this.player.hitRadius,
+        this.player.hitRadius,
+        'player',
+      );
+      return;
     }
+  }
+
+  private countActiveBullets(): number {
+    return this.bullets.filter((b) => b.active).length;
   }
 
   private render(): void {
     const { ctx } = this.engine;
     this.engine.clear();
     this.drawStars(ctx);
+    this.bossBerserkFlash.draw(ctx, this.bossBerserk.isFlashVisible);
+
+    const activeBulletCount = this.countActiveBullets();
+    const enemyBulletOpacity = gameSettings.getEnemyDrawOpacity(activeBulletCount);
+    const playerBulletOpacity = gameSettings.getPlayerDrawOpacity(activeBulletCount);
 
     if (this.state === GameState.MENU) {
       this.menuOverlay.draw(ctx);
+      this.settingsOverlay.setButtonPlacement('menu');
+      this.settingsOverlay.draw(ctx, 0, true);
       return;
     }
 
     for (const enemy of this.enemies) enemy.draw(ctx);
-    if (this.bossSystem.boss?.active) this.bossSystem.boss.draw(ctx);
-    for (const b of this.bullets) b.draw(ctx);
-    if (this.state !== GameState.PAUSED) {
-      this.player.draw(ctx);
+    const boss = this.bossSystem.boss;
+    if (boss && (boss.active || boss.isDying)) boss.draw(ctx);
+    this.player.draw(ctx);
+    for (const explosion of this.defeatExplosions) explosion.draw(ctx);
+    for (const b of this.bullets) {
+      const opacity = b.owner === 'player' ? playerBulletOpacity : enemyBulletOpacity;
+      b.draw(ctx, opacity);
+    }
+
+    if (this.state === GameState.PLAYING || this.state === GameState.PAUSED) {
+      if (!this.player.isDying) {
+        this.mobileControls.draw(ctx, this.player);
+      }
     }
 
     this.hud.draw(ctx, this.player, this.exp, this.spawn.elapsedSec, this.kills);
 
-    if (this.state === GameState.PLAYING) {
-      this.mobileControls.draw(ctx, this.player);
-    }
-
     if (this.state === GameState.PAUSED) {
-      this.player.draw(ctx);
-      this.mobileControls.draw(ctx, this.player);
       if (this.pauseKind === 'level_up') {
         this.levelUpOverlay.draw(ctx);
       } else {
         this.relicOverlay.draw(ctx);
       }
       this.selectionPhantom?.draw(ctx);
+      this.settingsOverlay.setButtonPlacement('inGame');
+      this.settingsOverlay.draw(ctx, activeBulletCount, true);
     }
 
     if (this.state === GameState.GAME_OVER) {

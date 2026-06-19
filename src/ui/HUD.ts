@@ -19,14 +19,6 @@ export class HUD {
     const barY = hudBarTopY();
     const labelY = hudLabelBottomY();
 
-    // 顶栏底部分隔线
-    ctx.strokeStyle = UI.borderMuted;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(pad, barY - 6);
-    ctx.lineTo(GAME_WIDTH - pad, barY - 6);
-    ctx.stroke();
-
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     const mins = Math.floor(elapsedSec / 60);
