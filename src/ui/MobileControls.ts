@@ -34,6 +34,9 @@ export class MobileControls {
   private lastPointerY = 0;
   private latchedDirX = 0;
   private latchedDirY = 0;
+  /** 急停或静止后，相对此锚点的位移达阈值才重新起飞 */
+  private restartAnchorX = 0;
+  private restartAnchorY = 0;
 
   /** 重置摇杆拖拽状态（场景切换时调用，避免残留输入） */
   resetJoystick(): void {
@@ -44,6 +47,8 @@ export class MobileControls {
     this.lastPointerY = 0;
     this.latchedDirX = 0;
     this.latchedDirY = 0;
+    this.restartAnchorX = 0;
+    this.restartAnchorY = 0;
   }
 
   /** 同步摇杆旋钮视觉：反映当前移动方向（键盘与触屏共用） */
@@ -106,6 +111,8 @@ export class MobileControls {
     if (!this.joystickDragging) {
       this.lastPointerX = x;
       this.lastPointerY = y;
+      this.restartAnchorX = x;
+      this.restartAnchorY = y;
       this.latchedDirX = 0;
       this.latchedDirY = 0;
     }
@@ -313,23 +320,33 @@ export class MobileControls {
     }
   }
 
-  /** 根据手指位移增量更新锁定方向（八方向吸附）；手指静止时保持上一方向 */
+  /** 根据手指位移更新锁定方向（八方向吸附）；静止时相对锚点累计位移达阈值再起飞 */
   private updateJoystickFromDelta(x: number, y: number): [number, number] {
     const deltaX = x - this.lastPointerX;
     const deltaY = y - this.lastPointerY;
     const deltaDist = Math.hypot(deltaX, deltaY);
     const isMoving = this.latchedDirX !== 0 || this.latchedDirY !== 0;
 
-    if (deltaDist > 0) {
+    if (!isMoving) {
+      const anchorDx = x - this.restartAnchorX;
+      const anchorDy = y - this.restartAnchorY;
+      const anchorDist = Math.hypot(anchorDx, anchorDy);
+      if (anchorDist >= JOYSTICK_DELTA_THRESHOLD) {
+        const snapped = snapTo8Directions(anchorDx, anchorDy);
+        this.latchedDirX = snapped.x;
+        this.latchedDirY = snapped.y;
+      }
+    } else if (deltaDist > 0) {
       if (
-        isMoving
-        && deltaDist > JOYSTICK_CANCEL_MIN
+        deltaDist > JOYSTICK_CANCEL_MIN
         && deltaDist < JOYSTICK_DELTA_THRESHOLD
       ) {
         const pullDir = snapTo8Directions(deltaX, deltaY);
         if (!same8Direction(this.latchedDirX, this.latchedDirY, pullDir.x, pullDir.y)) {
           this.latchedDirX = 0;
           this.latchedDirY = 0;
+          this.restartAnchorX = x;
+          this.restartAnchorY = y;
         }
       } else if (deltaDist >= JOYSTICK_DELTA_THRESHOLD) {
         const snapped = snapTo8Directions(deltaX, deltaY);
