@@ -106,6 +106,15 @@ export class CollisionSystem {
             laserDamageApplied = true;
             playerHit = true;
           }
+        } else if (bullet.shape === 'zone' && bullet.isZoneActive()) {
+          if (this.playerInZone(bullet, player)) {
+            bullet.zoneHitApplied = true;
+            if (player.isShieldActive) {
+              player.onShieldBlockBullet();
+            } else if (player.takeDamage(bullet.damage)) {
+              playerHit = true;
+            }
+          }
         } else if (player.isShieldActive) {
           player.onShieldBlockBullet();
           bullet.active = false;
@@ -201,6 +210,10 @@ export class CollisionSystem {
   }
 
   private enemyBulletHitsPlayer(bullet: Bullet, player: Player): boolean {
+    if (bullet.shape === 'zone') {
+      if (!bullet.isZoneActive() || bullet.zoneHitApplied) return false;
+      return this.playerInZone(bullet, player);
+    }
     if (bullet.shape === 'laser') {
       if (!bullet.isLaserActive() || bullet.laserHitApplied) return false;
       return segmentCircleOverlap(
@@ -216,6 +229,10 @@ export class CollisionSystem {
       );
     }
     return circleOverlap(bullet.x, bullet.y, bullet.radius, player.x, player.y, player.hitRadius);
+  }
+
+  private playerInZone(bullet: Bullet, player: Player): boolean {
+    return player.x >= bullet.zoneLeft && player.x <= bullet.zoneRight;
   }
 }
 

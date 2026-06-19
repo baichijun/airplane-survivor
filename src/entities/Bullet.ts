@@ -6,6 +6,8 @@ import {
   BULLET_LONG_LENGTH,
   GAME_HEIGHT,
   GAME_WIDTH,
+  BOSS_ZONE_ACTIVE_DURATION,
+  BOSS_ZONE_WARNING_DURATION,
   LASER_ACTIVE_DURATION,
   LASER_BEAM_WIDTH,
   LASER_GAP_DURATION,
@@ -36,6 +38,12 @@ export class Bullet {
   lineY2 = 0;
   phaseTimer = 0;
   laserHitApplied = false;
+
+  /** 区域攻击：左边界（像素） */
+  zoneLeft = 0;
+  /** 区域攻击：右边界（像素） */
+  zoneRight = 0;
+  zoneHitApplied = false;
 
   homing = false;
   isDroneBullet = false;
@@ -92,8 +100,22 @@ export class Bullet {
     this.lineY2 = startY + ny * t;
   }
 
+  initZone(left: number, right: number): void {
+    this.shape = 'zone';
+    this.phase = 'warning';
+    this.phaseTimer = 0;
+    this.zoneHitApplied = false;
+    this.zoneLeft = left;
+    this.zoneRight = right;
+  }
+
   update(dt: number, gameWidth: number, gameHeight: number, homingTargets?: { x: number; y: number }[]): void {
     if (!this.active) return;
+
+    if (this.shape === 'zone') {
+      this.updateZone(dt);
+      return;
+    }
 
     if (this.shape === 'laser') {
       this.updateLaser(dt);
@@ -182,6 +204,27 @@ export class Bullet {
     }
   }
 
+  /** 区域攻击时序：预警 0.3s → 攻击 0.8s */
+  private updateZone(dt: number): void {
+    this.phaseTimer += dt;
+
+    if (this.phase === 'warning') {
+      if (this.phaseTimer >= BOSS_ZONE_WARNING_DURATION) {
+        this.phase = 'active';
+        this.phaseTimer = 0;
+        this.zoneHitApplied = false;
+      }
+      return;
+    }
+
+    if (this.phase === 'active') {
+      if (this.phaseTimer >= BOSS_ZONE_ACTIVE_DURATION) {
+        this.phase = 'done';
+        this.active = false;
+      }
+    }
+  }
+
   isLaserWarningVisible(): boolean {
     return this.shape === 'laser' && this.phase === 'warning';
   }
@@ -192,6 +235,14 @@ export class Bullet {
 
   isLaserActive(): boolean {
     return this.shape === 'laser' && this.phase === 'active';
+  }
+
+  isZoneWarningVisible(): boolean {
+    return this.shape === 'zone' && this.phase === 'warning';
+  }
+
+  isZoneActive(): boolean {
+    return this.shape === 'zone' && this.phase === 'active';
   }
 
   getLongSegment(): { x1: number; y1: number; x2: number; y2: number } {
@@ -211,6 +262,11 @@ export class Bullet {
 
     if (this.shape === 'laser') {
       this.drawLaser(ctx);
+      return;
+    }
+
+    if (this.shape === 'zone') {
+      this.drawZone(ctx);
       return;
     }
 
@@ -284,6 +340,25 @@ export class Bullet {
       ctx.moveTo(this.lineX1, this.lineY1);
       ctx.lineTo(this.lineX2, this.lineY2);
       ctx.stroke();
+    }
+  }
+
+  private drawZone(ctx: CanvasRenderingContext2D): void {
+    const width = this.zoneRight - this.zoneLeft;
+    if (this.isZoneWarningVisible()) {
+      const pulse = 0.35 + Math.sin(this.phaseTimer * 20) * 0.15;
+      ctx.fillStyle = `rgba(239, 68, 68, ${pulse})`;
+      ctx.fillRect(this.zoneLeft, 0, width, GAME_HEIGHT);
+      return;
+    }
+
+    if (this.isZoneActive()) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
+      ctx.fillRect(this.zoneLeft, 0, width, GAME_HEIGHT);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      for (let y = 0; y < GAME_HEIGHT; y += 24) {
+        ctx.fillRect(this.zoneLeft, y, width, 8);
+      }
     }
   }
 }

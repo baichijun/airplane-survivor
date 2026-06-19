@@ -300,6 +300,39 @@ export const BOSS_CONTACT_DAMAGE = 2;
 /** Boss 攻击模式自动轮换周期（秒） */
 export const BOSS_PATTERN_SWITCH_INTERVAL = 3;
 
+/** 自机显示宽度（像素，用于 Boss 弹幕间距计算） */
+export const PLAYER_SHIP_WIDTH = PLAYER_INITIAL.hitRadius * 2;
+
+/** 动作 A：连射间隔（秒） */
+export const BOSS_BURST_SHOT_INTERVAL = 0.1;
+/** 动作 A：每轮连射发数 */
+export const BOSS_BURST_SHOTS_PER_ROUND = 3;
+/** 动作 A：轮次间隔（秒） */
+export const BOSS_BURST_ROUND_INTERVAL = 0.6;
+/** 动作 A：总轮次 */
+export const BOSS_BURST_ROUND_COUNT = 3;
+/** 动作 A：子弹半径相对基础圆弹的倍率 */
+export const BOSS_BURST_BULLET_RADIUS_MULT = 2;
+
+/** 动作 B：子弹横向间距（自机宽度倍数） */
+export const BOSS_ROW_SPACING_MULT = 1.5;
+/** 动作 B：波次间隔（秒） */
+export const BOSS_ROW_WAVE_INTERVAL = 0.5;
+/** 动作 B：波次数 */
+export const BOSS_ROW_WAVE_COUNT = 3;
+
+/** 动作 C：画布横向分区数 */
+export const BOSS_ZONE_COUNT = 5;
+/** 动作 C：区域预警时长（秒） */
+export const BOSS_ZONE_WARNING_DURATION = 0.3;
+/** 动作 C：区域攻击持续时长（秒） */
+export const BOSS_ZONE_ACTIVE_DURATION = 0.8;
+/** 动作 C：攻击波次数（依次 1/2/3 个区域） */
+export const BOSS_ZONE_WAVE_COUNT = 3;
+
+/** 一种攻击模式结束后，切换下一种前的冷却（秒） */
+export const BOSS_PATTERN_COOLDOWN = 1.2;
+
 /** 跳过宝物选项：最大生命加成（占当前最大生命的比例） */
 export const RELIC_SKIP_MAX_HP_BONUS = 0.3;
 

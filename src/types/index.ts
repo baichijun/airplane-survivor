@@ -38,7 +38,7 @@ export interface Vec2 {
 export type BulletAimType = 'direct' | 'spread' | 'vertical';
 
 /** 敌弹攻击形态 */
-export type BulletShape = 'dot' | 'long' | 'laser';
+export type BulletShape = 'dot' | 'long' | 'laser' | 'zone';
 
 /** 敌机配置 */
 export interface EnemyConfig {

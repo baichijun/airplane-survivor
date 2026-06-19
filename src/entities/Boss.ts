@@ -3,13 +3,12 @@ import {
   BOSS_Y,
   BOSS_WIDTH,
   BOSS_HEIGHT,
-  BOSS_PATTERN_SWITCH_INTERVAL,
   GAME_WIDTH,
   PLAYER_MARGIN,
   bossMaxHp,
-  bossAttackInterval,
   bossBulletDamage,
 } from '../config/balance';
+import { BossAttackSystem } from '../systems/BossAttackSystem';
 import { drawBossShip } from '../ui/ShipSprites';
 
 /** Boss 实体：横向移动，多段攻击 */
@@ -23,13 +22,10 @@ export class Boss {
   height = BOSS_HEIGHT;
   bossIndex: number;
   moveDir = 1;
-  attackTimer = 0;
-  patternTimer = 0;
-  patternIndex = 0;
   targetX = 0;
   targetY = 0;
-  attackSpeed: number;
   bulletDamage: number;
+  readonly attackSystem = new BossAttackSystem();
 
   constructor(spawnTimeSec: number, bossIndex: number) {
     this.bossIndex = bossIndex;
@@ -37,7 +33,6 @@ export class Boss {
     this.y = BOSS_Y;
     this.maxHp = bossMaxHp(spawnTimeSec, bossIndex);
     this.hp = this.maxHp;
-    this.attackSpeed = bossAttackInterval(bossIndex);
     this.bulletDamage = bossBulletDamage(bossIndex);
     this.moveDir = Math.random() < 0.5 ? -1 : 1;
   }
@@ -58,25 +53,6 @@ export class Boss {
       this.x = maxX;
       this.moveDir = -1;
     }
-
-    this.attackTimer += dt;
-    this.patternTimer += dt;
-    if (this.patternTimer >= BOSS_PATTERN_SWITCH_INTERVAL) {
-      this.patternTimer = 0;
-      this.patternIndex = (this.patternIndex + 1) % 4;
-    }
-  }
-
-  canFire(): boolean {
-    return this.attackTimer >= this.attackSpeed;
-  }
-
-  resetFireTimer(): void {
-    this.attackTimer = 0;
-  }
-
-  get currentPattern(): number {
-    return this.patternIndex;
   }
 
   takeDamage(amount: number): void {

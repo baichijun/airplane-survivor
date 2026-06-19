@@ -307,7 +307,7 @@ export class Game {
     }
 
     if (this.bossSystem.boss?.active) {
-      this.bullets.push(...this.combat.fireBoss(this.bossSystem.boss));
+      this.bullets.push(...this.combat.updateBossAttack(this.bossSystem.boss, dt));
     }
 
     const homingTargets = this.getHomingTargets();

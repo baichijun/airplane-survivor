@@ -6,15 +6,16 @@ import {
   hudBarTopY,
   mobileJoystickCenterY,
 } from '../config/balance';
+import { UI, drawGlowCircle, drawShieldIcon, fontBody, fontDisplay } from './theme';
 
 /** 虚拟按键区域距屏幕边缘的内边距（像素） */
-const PAD = 12;
+const PAD = 14;
 /** 护盾按钮边长（像素） */
-const SHIELD_BTN_SIZE = 48;
+const SHIELD_BTN_SIZE = 58;
 /** 摇杆底盘半径（像素） */
-const JOYSTICK_BASE_R = 52;
+const JOYSTICK_BASE_R = 54;
 /** 摇杆旋钮半径（像素） */
-const JOYSTICK_KNOB_R = 22;
+const JOYSTICK_KNOB_R = 23;
 /** 摇杆中心死区（相对底盘半径） */
 const JOYSTICK_DEAD_ZONE = 0.1;
 
@@ -87,34 +88,78 @@ export class MobileControls {
   private drawJoystick(ctx: CanvasRenderingContext2D): void {
     const cx = this.anchorX;
     const cy = this.anchorY;
+    const dragging = this.joystickDragging && (this.knobOffsetX !== 0 || this.knobOffsetY !== 0);
+    const pulse = dragging ? 0.85 + Math.sin(performance.now() * 0.012) * 0.15 : 1;
 
-    ctx.fillStyle = 'rgba(30, 41, 59, 0.75)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 2;
+    // 外圈光晕
+    drawGlowCircle(ctx, cx, cy, JOYSTICK_BASE_R + 4, UI.accentDim, dragging ? 18 : 10);
+
+    // 底盘
+    const baseGrad = ctx.createRadialGradient(cx, cy, JOYSTICK_BASE_R * 0.2, cx, cy, JOYSTICK_BASE_R);
+    baseGrad.addColorStop(0, 'rgba(18, 36, 68, 0.92)');
+    baseGrad.addColorStop(1, 'rgba(6, 12, 28, 0.88)');
+    ctx.fillStyle = baseGrad;
     ctx.beginPath();
     ctx.arc(cx, cy, JOYSTICK_BASE_R, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.strokeStyle = UI.border;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, JOYSTICK_BASE_R, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    // 内圈刻度
+    ctx.strokeStyle = 'rgba(34, 211, 238, 0.2)';
     ctx.lineWidth = 1;
-    for (let i = 0; i < 4; i++) {
-      const a = (Math.PI / 2) * i;
+    ctx.beginPath();
+    ctx.arc(cx, cy, JOYSTICK_BASE_R - 14, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i;
+      const inner = JOYSTICK_BASE_R - 22;
+      const outer = JOYSTICK_BASE_R - 10;
+      ctx.strokeStyle = i % 2 === 0 ? 'rgba(34, 211, 238, 0.35)' : 'rgba(34, 211, 238, 0.15)';
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(a) * (JOYSTICK_BASE_R - 8), cy + Math.sin(a) * (JOYSTICK_BASE_R - 8));
+      ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
       ctx.stroke();
     }
 
     const knobX = cx + this.knobOffsetX;
     const knobY = cy + this.knobOffsetY;
-    ctx.fillStyle = 'rgba(96, 165, 250, 0.9)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 2;
+
+    if (dragging) {
+      drawGlowCircle(ctx, knobX, knobY, JOYSTICK_KNOB_R + 2, UI.accentGlow, 14 * pulse);
+    }
+
+    const knobGrad = ctx.createRadialGradient(
+      knobX - 4,
+      knobY - 4,
+      2,
+      knobX,
+      knobY,
+      JOYSTICK_KNOB_R,
+    );
+    knobGrad.addColorStop(0, UI.accentBright);
+    knobGrad.addColorStop(0.55, UI.accent);
+    knobGrad.addColorStop(1, '#0891b2');
+    ctx.fillStyle = knobGrad;
     ctx.beginPath();
     ctx.arc(knobX, knobY, JOYSTICK_KNOB_R, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(knobX, knobY, JOYSTICK_KNOB_R, 0, Math.PI * 2);
     ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(knobX - 5, knobY - 5, 4, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   private drawShieldButton(ctx: CanvasRenderingContext2D, player: Player): void {
@@ -122,47 +167,78 @@ export class MobileControls {
     const bw = SHIELD_BTN_SIZE;
     const bh = SHIELD_BTN_SIZE;
     const bx = GAME_WIDTH - PAD - bw;
-    const by = barTop - bh - 28;
+    const by = barTop - bh - 30;
     this.shieldBtn = { x: bx, y: by, w: bw, h: bh };
 
     const ready = player.shieldCooldownTimer <= 0 && !player.isShieldActive;
     const active = player.isShieldActive;
+    const cx = bx + bw / 2;
+    const cy = by + bh / 2;
 
-    ctx.fillStyle = active
-      ? 'rgba(96, 165, 250, 0.85)'
-      : ready
-        ? 'rgba(30, 41, 59, 0.85)'
-        : 'rgba(30, 41, 59, 0.55)';
-    ctx.strokeStyle = active ? '#93c5fd' : ready ? '#60a5fa' : 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, 8);
-    ctx.fill();
-    ctx.stroke();
-
-    if (!ready && !active && player.shieldCooldownTimer > 0) {
-      const ratio = player.shieldCooldownRatio;
-      ctx.strokeStyle = 'rgba(96, 165, 250, 0.6)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(bx + bw / 2, by + bh / 2, bw / 2 - 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ratio);
-      ctx.stroke();
+    if (ready || active) {
+      const glowColor = active ? UI.accentBright : UI.accentGlow;
+      drawGlowCircle(ctx, cx, cy, bw / 2 + 2, glowColor, active ? 20 : 12);
     }
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('护盾', bx + bw / 2, by + bh / 2 - 6);
+    const bgGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
     if (active) {
-      ctx.font = '10px sans-serif';
-      ctx.fillText('生效中', bx + bw / 2, by + bh / 2 + 8);
-    } else if (!ready) {
-      ctx.font = '10px sans-serif';
-      ctx.fillText(`${Math.ceil(player.shieldCooldownTimer)}s`, bx + bw / 2, by + bh / 2 + 8);
+      bgGrad.addColorStop(0, 'rgba(34, 211, 238, 0.95)');
+      bgGrad.addColorStop(1, 'rgba(8, 145, 178, 0.9)');
+    } else if (ready) {
+      bgGrad.addColorStop(0, 'rgba(14, 32, 58, 0.95)');
+      bgGrad.addColorStop(1, 'rgba(6, 16, 36, 0.95)');
     } else {
-      ctx.font = '10px sans-serif';
-      ctx.fillText('就绪', bx + bw / 2, by + bh / 2 + 8);
+      bgGrad.addColorStop(0, 'rgba(14, 24, 42, 0.75)');
+      bgGrad.addColorStop(1, 'rgba(6, 12, 24, 0.8)');
+    }
+    ctx.fillStyle = bgGrad;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 12);
+    ctx.fill();
+
+    ctx.strokeStyle = active ? '#fff' : ready ? UI.accent : UI.borderMuted;
+    ctx.lineWidth = active ? 2.5 : ready ? 2 : 1.5;
+    ctx.beginPath();
+    ctx.roundRect(bx + 0.5, by + 0.5, bw - 1, bh - 1, 12);
+    ctx.stroke();
+
+    // 冷却环形进度
+    if (!ready && !active && player.shieldCooldownTimer > 0) {
+      const ratio = player.shieldCooldownRatio;
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, bw / 2 - 5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = UI.accent;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, cy, bw / 2 - 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ratio);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+
+    const iconFill = active ? '#fff' : ready ? UI.accentBright : 'rgba(148, 163, 184, 0.7)';
+    const iconStroke = active ? 'rgba(6, 78, 99, 0.8)' : ready ? UI.accent : 'rgba(100, 116, 139, 0.5)';
+    drawShieldIcon(ctx, cx, cy - 2, 26, iconFill, iconStroke);
+
+    // 状态文字在按钮下方
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    if (active) {
+      ctx.fillStyle = UI.accentBright;
+      ctx.font = fontDisplay(10, 700);
+      ctx.fillText('ACTIVE', cx, by + bh + 4);
+    } else if (!ready) {
+      ctx.fillStyle = UI.textMuted;
+      ctx.font = fontDisplay(11, 700);
+      ctx.fillText(`${Math.ceil(player.shieldCooldownTimer)}s`, cx, by + bh + 3);
+    } else {
+      ctx.fillStyle = UI.accent;
+      ctx.font = fontBody(10, true);
+      ctx.fillText('就绪', cx, by + bh + 4);
     }
   }
 
