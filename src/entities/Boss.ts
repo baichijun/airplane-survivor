@@ -5,6 +5,7 @@ import {
   BOSS_HEIGHT,
   GAME_WIDTH,
   PLAYER_MARGIN,
+  bossAttackInterval,
   bossMaxHp,
   bossBulletDamage,
 } from '../config/balance';
@@ -22,8 +23,10 @@ export class Boss {
   height = BOSS_HEIGHT;
   bossIndex: number;
   moveDir = 1;
+  attackTimer = 0;
   targetX = 0;
   targetY = 0;
+  attackSpeed: number;
   bulletDamage: number;
   readonly attackSystem = new BossAttackSystem();
 
@@ -33,6 +36,7 @@ export class Boss {
     this.y = BOSS_Y;
     this.maxHp = bossMaxHp(spawnTimeSec, bossIndex);
     this.hp = this.maxHp;
+    this.attackSpeed = bossAttackInterval(bossIndex);
     this.bulletDamage = bossBulletDamage(bossIndex);
     this.moveDir = Math.random() < 0.5 ? -1 : 1;
   }
@@ -53,6 +57,16 @@ export class Boss {
       this.x = maxX;
       this.moveDir = -1;
     }
+
+    this.attackTimer += dt;
+  }
+
+  canFire(): boolean {
+    return this.attackTimer >= this.attackSpeed;
+  }
+
+  resetFireTimer(): void {
+    this.attackTimer = 0;
   }
 
   takeDamage(amount: number): void {

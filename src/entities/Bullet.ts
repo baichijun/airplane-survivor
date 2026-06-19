@@ -43,6 +43,8 @@ export class Bullet {
   zoneLeft = 0;
   /** 区域攻击：右边界（像素） */
   zoneRight = 0;
+  /** 区域索引（0–4，用于视觉变化） */
+  zoneIndex = 0;
   zoneHitApplied = false;
 
   homing = false;
@@ -100,13 +102,14 @@ export class Bullet {
     this.lineY2 = startY + ny * t;
   }
 
-  initZone(left: number, right: number): void {
+  initZone(left: number, right: number, index = 0): void {
     this.shape = 'zone';
     this.phase = 'warning';
     this.phaseTimer = 0;
     this.zoneHitApplied = false;
     this.zoneLeft = left;
     this.zoneRight = right;
+    this.zoneIndex = index;
   }
 
   update(dt: number, gameWidth: number, gameHeight: number, homingTargets?: { x: number; y: number }[]): void {
@@ -344,21 +347,221 @@ export class Bullet {
   }
 
   private drawZone(ctx: CanvasRenderingContext2D): void {
+    const left = this.zoneLeft;
     const width = this.zoneRight - this.zoneLeft;
+    const cx = left + width / 2;
+    const t = this.phaseTimer;
+    const seed = this.zoneIndex * 1.618;
+
     if (this.isZoneWarningVisible()) {
-      const pulse = 0.35 + Math.sin(this.phaseTimer * 20) * 0.15;
-      ctx.fillStyle = `rgba(239, 68, 68, ${pulse})`;
-      ctx.fillRect(this.zoneLeft, 0, width, GAME_HEIGHT);
+      this.drawZoneWarning(ctx, left, width, cx, t, seed);
       return;
     }
 
     if (this.isZoneActive()) {
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
-      ctx.fillRect(this.zoneLeft, 0, width, GAME_HEIGHT);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-      for (let y = 0; y < GAME_HEIGHT; y += 24) {
-        ctx.fillRect(this.zoneLeft, y, width, 8);
-      }
+      this.drawZoneActive(ctx, left, width, cx, t, seed);
     }
+  }
+
+  /** 预警：锁定框 + 扫描线 + 倒三角指示 */
+  private drawZoneWarning(
+    ctx: CanvasRenderingContext2D,
+    left: number,
+    width: number,
+    cx: number,
+    t: number,
+    seed: number,
+  ): void {
+    const progress = Math.min(1, t / BOSS_ZONE_WARNING_DURATION);
+    const pulse = 0.55 + Math.sin(t * 14 + seed) * 0.2;
+    const scanY = progress * GAME_HEIGHT;
+
+    // 暗色底 + 纵向渐变
+    const bg = ctx.createLinearGradient(left, 0, left + width, GAME_HEIGHT);
+    bg.addColorStop(0, `rgba(251, 191, 36, ${0.06 + progress * 0.06})`);
+    bg.addColorStop(0.5, `rgba(244, 63, 94, ${0.1 + pulse * 0.08})`);
+    bg.addColorStop(1, `rgba(6, 10, 20, ${0.15 + progress * 0.1})`);
+    ctx.fillStyle = bg;
+    ctx.fillRect(left, 0, width, GAME_HEIGHT);
+
+    // 斜向全息网格
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, 0, width, GAME_HEIGHT);
+    ctx.clip();
+    ctx.strokeStyle = `rgba(251, 191, 36, ${0.12 + pulse * 0.1})`;
+    ctx.lineWidth = 1;
+    const gridOff = (t * 48 + seed * 20) % 24;
+    for (let y = -24 + gridOff; y < GAME_HEIGHT + 24; y += 24) {
+      ctx.beginPath();
+      ctx.moveTo(left, y);
+      ctx.lineTo(left + width, y + width * 0.35);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 扫描光束
+    const scanGrad = ctx.createLinearGradient(left, scanY - 28, left, scanY + 28);
+    scanGrad.addColorStop(0, 'rgba(34, 211, 238, 0)');
+    scanGrad.addColorStop(0.45, 'rgba(34, 211, 238, 0.55)');
+    scanGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.85)');
+    scanGrad.addColorStop(0.55, 'rgba(34, 211, 238, 0.55)');
+    scanGrad.addColorStop(1, 'rgba(34, 211, 238, 0)');
+    ctx.fillStyle = scanGrad;
+    ctx.fillRect(left, scanY - 28, width, 56);
+
+    // 角标锁定框
+    const inset = 6;
+    const bracket = Math.min(18, width * 0.22);
+    ctx.strokeStyle = `rgba(251, 191, 36, ${0.65 + pulse * 0.3})`;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'square';
+    this.strokeZoneBrackets(ctx, left + inset, inset, width - inset * 2, GAME_HEIGHT - inset * 2, bracket);
+
+    // 中心瞄准线
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = `rgba(244, 63, 94, ${0.35 + pulse * 0.25})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, 8);
+    ctx.lineTo(cx, GAME_HEIGHT - 8);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 顶部警示条
+    ctx.fillStyle = `rgba(251, 191, 36, ${0.55 + pulse * 0.25})`;
+    ctx.fillRect(left, 0, width, 3);
+
+    // 向下箭头（闪烁）
+    const chevronAlpha = 0.45 + Math.sin(t * 18) * 0.35;
+    ctx.fillStyle = `rgba(251, 191, 36, ${chevronAlpha})`;
+    for (let i = 0; i < 3; i += 1) {
+      const cy = 22 + i * 14 + Math.sin(t * 10 + i) * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 7, cy - 4);
+      ctx.lineTo(cx + 7, cy - 4);
+      ctx.lineTo(cx, cy + 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  /** 攻击：等离子柱 + 下落能量流 */
+  private drawZoneActive(
+    ctx: CanvasRenderingContext2D,
+    left: number,
+    width: number,
+    cx: number,
+    t: number,
+    seed: number,
+  ): void {
+    const progress = Math.min(1, t / BOSS_ZONE_ACTIVE_DURATION);
+    const flicker = 0.85 + Math.sin(t * 32 + seed * 4) * 0.15;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, 0, width, GAME_HEIGHT);
+    ctx.clip();
+
+    // 核心光柱
+    const coreW = Math.max(8, width * 0.28);
+    const coreGrad = ctx.createLinearGradient(cx - coreW, 0, cx + coreW, 0);
+    coreGrad.addColorStop(0, 'rgba(244, 63, 94, 0)');
+    coreGrad.addColorStop(0.35, `rgba(232, 121, 249, ${0.45 * flicker})`);
+    coreGrad.addColorStop(0.5, `rgba(255, 255, 255, ${0.75 * flicker})`);
+    coreGrad.addColorStop(0.65, `rgba(232, 121, 249, ${0.45 * flicker})`);
+    coreGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+    ctx.fillStyle = coreGrad;
+    ctx.fillRect(left, 0, width, GAME_HEIGHT);
+
+    // 外层辉光
+    const glowGrad = ctx.createLinearGradient(left, 0, left + width, 0);
+    glowGrad.addColorStop(0, 'rgba(244, 63, 94, 0)');
+    glowGrad.addColorStop(0.5, `rgba(244, 63, 94, ${0.38 * flicker})`);
+    glowGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(left, 0, width, GAME_HEIGHT);
+
+    // 下落等离子流
+    const streamCount = Math.max(3, Math.floor(width / 14));
+    for (let i = 0; i < streamCount; i += 1) {
+      const sx = left + ((i + 0.5) / streamCount) * width;
+      const phase = t * 220 + i * 37 + seed * 11;
+      const headY = (phase % (GAME_HEIGHT + 60)) - 30;
+      const streamGrad = ctx.createLinearGradient(sx, headY - 40, sx, headY + 12);
+      streamGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      streamGrad.addColorStop(0.6, `rgba(34, 211, 238, ${0.55 * flicker})`);
+      streamGrad.addColorStop(1, `rgba(255, 255, 255, ${0.9 * flicker})`);
+      ctx.strokeStyle = streamGrad;
+      ctx.lineWidth = 1.5 + (i % 2) * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.sin(t * 8 + i) * 2, headY - 40);
+      ctx.lineTo(sx, headY + 12);
+      ctx.stroke();
+    }
+
+    // 电弧纹理
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.18 * flicker})`;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i += 1) {
+      const ay = ((t * 140 + i * 90 + seed * 30) % (GAME_HEIGHT + 40)) - 20;
+      ctx.beginPath();
+      ctx.moveTo(left + 4, ay);
+      ctx.lineTo(cx, ay + 8);
+      ctx.lineTo(left + width - 4, ay + 3);
+      ctx.stroke();
+    }
+
+    // 边缘能量框
+    ctx.strokeStyle = `rgba(34, 211, 238, ${0.55 + progress * 0.25})`;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(34, 211, 238, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.strokeRect(left + 1, 1, width - 2, GAME_HEIGHT - 2);
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+
+    // 顶部冲击波
+    const shockH = 10 + progress * 6;
+    const shockGrad = ctx.createLinearGradient(left, 0, left, shockH);
+    shockGrad.addColorStop(0, `rgba(255, 255, 255, ${0.65 * flicker})`);
+    shockGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+    ctx.fillStyle = shockGrad;
+    ctx.fillRect(left, 0, width, shockH);
+  }
+
+  private strokeZoneBrackets(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    len: number,
+  ): void {
+    // 左上
+    ctx.beginPath();
+    ctx.moveTo(x + len, y);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x, y + len);
+    ctx.stroke();
+    // 右上
+    ctx.beginPath();
+    ctx.moveTo(x + w - len, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + len);
+    ctx.stroke();
+    // 左下
+    ctx.beginPath();
+    ctx.moveTo(x, y + h - len);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x + len, y + h);
+    ctx.stroke();
+    // 右下
+    ctx.beginPath();
+    ctx.moveTo(x + w - len, y + h);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x + w, y + h - len);
+    ctx.stroke();
   }
 }

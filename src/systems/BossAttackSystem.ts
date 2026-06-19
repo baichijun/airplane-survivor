@@ -210,7 +210,7 @@ export class BossAttackSystem {
         'enemy',
         'zone',
       );
-      hazard.initZone(left, right);
+      hazard.initZone(left, right, index);
       return hazard;
     });
   }
