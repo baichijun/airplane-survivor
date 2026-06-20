@@ -87,7 +87,7 @@ export function hudLabelTopY(): number {
   return hudLabelBottomY() - HUD_LABEL_FONT_SIZE;
 }
 
-/** 虚拟摇杆圆心 Y 坐标（摇杆底边与文字标签顶边相距 HUD_TEXT_JOYSTICK_GAP） */
+/** 虚拟摇杆圆心 Y 坐标（位于 HP 标签上方，随 GAME_HEIGHT 动态计算） */
 export function mobileJoystickCenterY(joystickBaseR: number): number {
   const joystickBottom = hudLabelTopY() - HUD_TEXT_JOYSTICK_GAP;
   return joystickBottom - joystickBaseR;

@@ -24,7 +24,10 @@ const JOYSTICK_PLAYER_FADE_EXTRA_R = 20;
 /** 移动端虚拟摇杆（固定左下，仅展示移动方向）+ 护盾按钮 */
 export class MobileControls {
   private readonly joystickCenterX = PAD + JOYSTICK_BASE_R;
-  private readonly joystickCenterY = mobileJoystickCenterY(JOYSTICK_BASE_R);
+
+  private get joystickCenterY(): number {
+    return mobileJoystickCenterY(JOYSTICK_BASE_R);
+  }
 
   private joystickDragging = false;
   private shieldBtn = { x: 0, y: 0, w: SHIELD_BTN_SIZE, h: SHIELD_BTN_SIZE };
