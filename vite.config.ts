@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-/** 自定义域名用 '/'；若走 github.io/仓库名/ 路径则设为 '/airplane-survivor/' */
+/** 相对路径 base，兼容 GitHub Pages 子路径、Capacitor 与微信 web-view */
 export default defineConfig({
-  base: process.env.VITE_BASE ?? '/',
+  base: './',
 });

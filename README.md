@@ -99,7 +99,7 @@ npm run build:pages
 git push origin main
 ```
 
-**GitHub Pages 子路径：** CI 使用 `VITE_BASE=/airplane-survivor/`，与在线地址一致。
+**GitHub Pages：** 构建使用相对路径 `base: './'`，资源与页面同目录，避免子路径 `/airplane-survivor/` 下 404。
 
 **微信域名校验等静态文件：** 放入 `public/`，构建后会出现在网站根目录（如 `public/xxx.txt` → `/airplane-survivor/xxx.txt`）。
 
