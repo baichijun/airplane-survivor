@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run build:pages
         env:
-          VITE_BASE: /
+          VITE_BASE: /airplane-survivor/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
