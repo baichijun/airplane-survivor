@@ -12,8 +12,10 @@ export class Input {
   /** 当前手指在操控摇杆（含未过激活阈值），用于避免与其它触摸逻辑冲突 */
   private joystickCaptured = false;
   private shieldRequested = false;
-  /** 主控触摸点 id，避免多指切换导致摇杆向量突变 */
-  private activeTouchId: number | null = null;
+  /** 负责移动/摇杆的主控触摸点 id */
+  private moveTouchId: number | null = null;
+  /** 由 MobileControls 注入，用于 touchstart 时识别护盾按钮（支持多指） */
+  private shieldHitTest: ((x: number, y: number) => boolean) | null = null;
 
   constructor(engine: Engine) {
     window.addEventListener('keydown', (e) => {
@@ -33,12 +35,22 @@ export class Input {
       'touchstart',
       (e) => {
         e.preventDefault();
-        if (this.activeTouchId !== null) return;
-        const touch = e.changedTouches[0];
-        if (!touch) return;
-        this.activeTouchId = touch.identifier;
-        this.pointer = engine.screenToGame(touch.clientX, touch.clientY);
-        this.pointerDown = true;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          if (!touch) continue;
+          const pos = engine.screenToGame(touch.clientX, touch.clientY);
+
+          if (this.shieldHitTest?.(pos.x, pos.y)) {
+            this.shieldRequested = true;
+            continue;
+          }
+
+          if (this.moveTouchId === null) {
+            this.moveTouchId = touch.identifier;
+            this.pointer = pos;
+            this.pointerDown = true;
+          }
+        }
       },
       { passive: false },
     );
@@ -46,8 +58,8 @@ export class Input {
       'touchmove',
       (e) => {
         e.preventDefault();
-        if (this.activeTouchId === null) return;
-        const touch = this.findTouch(e.touches, this.activeTouchId);
+        if (this.moveTouchId === null) return;
+        const touch = this.findTouch(e.touches, this.moveTouchId);
         if (!touch) return;
         this.pointer = engine.screenToGame(touch.clientX, touch.clientY);
       },
@@ -55,10 +67,10 @@ export class Input {
     );
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
-      if (this.activeTouchId === null) return;
-      const ended = this.findTouch(e.changedTouches, this.activeTouchId);
+      if (this.moveTouchId === null) return;
+      const ended = this.findTouch(e.changedTouches, this.moveTouchId);
       if (!ended) return;
-      this.activeTouchId = null;
+      this.moveTouchId = null;
       this.pointerDown = false;
       this.pointer = null;
       this.clearJoystick();
@@ -108,6 +120,10 @@ export class Input {
     const len = Math.hypot(x, y);
     if (len > 0) return { x: x / len, y: y / len };
     return { x: 0, y: 0 };
+  }
+
+  setShieldHitTest(test: (x: number, y: number) => boolean): void {
+    this.shieldHitTest = test;
   }
 
   setJoystickCaptured(captured: boolean): void {

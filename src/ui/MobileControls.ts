@@ -91,7 +91,7 @@ export class MobileControls {
     }
   }
 
-  /** 每帧根据指针更新移动输入（触屏位移增量） */
+  /** 每帧根据指针更新移动输入（触屏位移增量）；护盾由 Input 多指 touchstart 单独处理 */
   updateFromPointer(input: Input): 'shield' | null {
     this.layoutShieldButton();
 
@@ -106,6 +106,7 @@ export class MobileControls {
 
     const { x, y } = input.pointer;
 
+    // 鼠标点击护盾（桌面）；触屏护盾已在 Input touchstart 中处理，避免占用 moveTouchId
     if (this.hitShield(x, y)) {
       this.releasePointerJoystick(input);
       return 'shield';
@@ -133,6 +134,12 @@ export class MobileControls {
     }
     input.setJoystickCaptured(false);
     input.clearJoystick();
+  }
+
+  /** 供 Input 在 touchstart 时判定护盾区域（须先 layout 以保证坐标正确） */
+  isShieldTouch(x: number, y: number): boolean {
+    this.layoutShieldButton();
+    return this.hitShield(x, y);
   }
 
   hitShield(x: number, y: number): boolean {

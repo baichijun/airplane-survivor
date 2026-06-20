@@ -85,6 +85,7 @@ export class Game {
   constructor(canvasId: string) {
     this.engine = new Engine(canvasId);
     this.input = new Input(this.engine);
+    this.input.setShieldHitTest((x, y) => this.mobileControls.isShieldTouch(x, y));
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.loop(t));
   }
