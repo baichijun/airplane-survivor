@@ -2,7 +2,8 @@
 
 一款基于 Canvas 的竖版射击生存游戏：自动开火、击杀敌机获取经验、升级三选一强化能力，击败 Boss 获取宝物，尽可能存活更久。
 
-**在线试玩：** https://baichijun.github.io/airplane-survivor/
+**在线试玩：** https://ai-airplane-survivor.qiguangming.com （自定义域名，Cloudflare CDN）  
+备用地址：https://baichijun.github.io/airplane-survivor/
 
 ---
 
