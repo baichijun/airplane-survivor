@@ -2,8 +2,17 @@ import type { EnemyConfig, EnemyType, GameMode } from '../types';
 
 /** 逻辑画布宽度（像素，iPhone 基准） */
 export const GAME_WIDTH = 375;
-/** 逻辑画布高度（像素，iPhone 基准） */
-export const GAME_HEIGHT = 667;
+/** 逻辑画布高度基准（像素，iPhone 基准；Engine 会在更高屏幕下扩展） */
+export const BASE_GAME_HEIGHT = 667;
+/** 逻辑画布高度，由 Engine.resize 按视口更新（≥ BASE_GAME_HEIGHT） */
+export let GAME_HEIGHT = BASE_GAME_HEIGHT;
+
+/** 根据视口计算并更新逻辑高度（仅当屏幕比设计比例更高时才扩展） */
+export function setGameHeightFromViewport(viewportWidth: number, viewportHeight: number): void {
+  const scaleW = viewportWidth / GAME_WIDTH;
+  const extendedHeight = viewportHeight / scaleW;
+  GAME_HEIGHT = Math.max(BASE_GAME_HEIGHT, Math.round(extendedHeight));
+}
 
 /** 被动经验获取速率（经验/秒，不击杀也有） */
 export const PASSIVE_XP_PER_SEC = 2;

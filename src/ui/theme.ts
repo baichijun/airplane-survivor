@@ -42,8 +42,11 @@ export function fontBody(size: number, bold = false): string {
 export async function loadUiFonts(): Promise<void> {
   if (!document.fonts?.load) return;
   await Promise.all([
+    document.fonts.load(`500 16px ${UI.fontDisplay}`),
     document.fonts.load(`700 16px ${UI.fontDisplay}`),
+    document.fonts.load(`900 16px ${UI.fontDisplay}`),
     document.fonts.load(`400 14px ${UI.fontBody}`),
+    document.fonts.load(`500 14px ${UI.fontBody}`),
     document.fonts.load(`700 14px ${UI.fontBody}`),
   ]);
 }

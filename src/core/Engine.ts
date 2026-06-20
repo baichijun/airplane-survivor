@@ -1,15 +1,26 @@
-import { GAME_WIDTH, GAME_HEIGHT } from '../config/balance';
+import { BASE_GAME_HEIGHT, GAME_WIDTH, GAME_HEIGHT, setGameHeightFromViewport } from '../config/balance';
 
 /** 单帧最大时间步长（秒），防止切后台后物理计算失控 */
 const MAX_DELTA = 0.05;
+
+function readViewportSize(): { width: number; height: number } {
+  const visualViewport = window.visualViewport;
+  if (visualViewport) {
+    return { width: visualViewport.width, height: visualViewport.height };
+  }
+  return { width: window.innerWidth, height: window.innerHeight };
+}
 
 /** 画布引擎：尺寸、渲染上下文、帧间隔 */
 export class Engine {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
   readonly width = GAME_WIDTH;
-  readonly height = GAME_HEIGHT;
   private dpr = 1;
+
+  get height(): number {
+    return GAME_HEIGHT;
+  }
 
   constructor(canvasId: string) {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
@@ -20,17 +31,28 @@ export class Engine {
     this.ctx = ctx;
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    window.visualViewport?.addEventListener('resize', () => this.resize());
   }
 
-  /** 适配高清屏与全屏缩放 */
+  /** 适配高清屏与全屏缩放；更高屏幕扩展逻辑高度以消除底部黑边 */
   resize(): void {
+    const { width: viewportW, height: viewportH } = readViewportSize();
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const scale = Math.min(
-      window.innerWidth / this.width,
-      window.innerHeight / this.height,
-    );
-    const displayW = this.width * scale;
-    const displayH = this.height * scale;
+
+    const scaleW = viewportW / this.width;
+    setGameHeightFromViewport(viewportW, viewportH);
+
+    let displayW: number;
+    let displayH: number;
+
+    if (GAME_HEIGHT > BASE_GAME_HEIGHT) {
+      displayW = viewportW;
+      displayH = viewportH;
+    } else {
+      const scale = Math.min(scaleW, viewportH / BASE_GAME_HEIGHT);
+      displayW = this.width * scale;
+      displayH = BASE_GAME_HEIGHT * scale;
+    }
 
     this.canvas.width = Math.floor(this.width * this.dpr);
     this.canvas.height = Math.floor(this.height * this.dpr);

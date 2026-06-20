@@ -1,16 +1,35 @@
 {
   "name": "airplane-survivor",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:update": "node scripts/build-update-bundle.mjs",
+    "build:pages": "npm run build && npm run build:update",
     "preview": "vite preview",
-    "loc": "scc --exclude-dir node_modules --exclude-dir dist ."
+    "loc": "scc --exclude-dir node_modules --exclude-dir dist .",
+    "cap:sync": "npm run build && npx cap sync android",
+    "cap:open": "npx cap open android",
+    "android:debug": "npm run cap:sync && powershell -NoProfile -Command \". .\\scripts\\setup-android-env.ps1; Set-Location android; .\\gradlew.bat assembleDebug\"",
+    "android:release": "npm run cap:sync && powershell -NoProfile -Command \". .\\scripts\\setup-android-env.ps1; Set-Location android; .\\gradlew.bat assembleRelease\""
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "@capgo/cli": "^8.12.4",
     "typescript": "~5.6.2",
     "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/screen-orientation": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-updater": "^8.49.7",
+    "@fontsource/noto-sans-sc": "^5.2.9",
+    "@fontsource/orbitron": "^5.2.8"
   }
 }
