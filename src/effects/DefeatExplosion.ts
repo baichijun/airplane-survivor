@@ -1,15 +1,29 @@
 import { drawGlowCircle, UI } from '../ui/theme';
+import { getDefeatBoomFrame, pickRandomDefeatBoomFrames } from './DefeatBoomSprites';
 
 /** 击破爆破种类：决定闪烁次数与配色 */
 export type DefeatExplosionKind = 'enemy' | 'boss' | 'player';
 
-const FLASH_COUNT: Record<DefeatExplosionKind, number> = {
+/** 击破爆破视觉模式：1=程序化光效，2=精灵图随机三帧 */
+export type DefeatExplosionMode = 1 | 2;
+
+/** 当前使用的击破爆破模式 */
+export const DEFEAT_EXPLOSION_MODE: DefeatExplosionMode = 2;
+
+export const FLASH_COUNT: Record<DefeatExplosionKind, number> = {
   enemy: 4,
   boss: 15,
   player: 3,
 };
 
 const FLASH_DURATION = 0.1;
+
+export interface DefeatAnchor {
+  cx: number;
+  cy: number;
+  halfW: number;
+  halfH: number;
+}
 
 interface FlashPoint {
   x: number;
@@ -18,15 +32,34 @@ interface FlashPoint {
   rotation: number;
 }
 
-interface DefeatAnchor {
-  cx: number;
-  cy: number;
-  halfW: number;
-  halfH: number;
+interface DefeatExplosionImpl {
+  finished: boolean;
+  update(dt: number): void;
+  draw(ctx: CanvasRenderingContext2D): void;
 }
 
-/** 机体图层上的击破爆破：在锚定区域内随机位置闪烁 */
-export class DefeatExplosion {
+function buildFlashPoints(anchor: DefeatAnchor, kind: DefeatExplosionKind): FlashPoint[] {
+  const count = FLASH_COUNT[kind];
+  const spreadX = anchor.halfW * (kind === 'boss' ? 2.1 : 1.75);
+  const spreadY = anchor.halfH * (kind === 'boss' ? 2.1 : 1.75);
+  const baseScale = kind === 'boss' ? 1.15 : kind === 'player' ? 0.95 : 0.8;
+
+  return Array.from({ length: count }, () => ({
+    x: anchor.cx + (Math.random() - 0.5) * spreadX,
+    y: anchor.cy + (Math.random() - 0.5) * spreadY,
+    scale: baseScale * (0.75 + Math.random() * 0.55),
+    rotation: Math.random() * Math.PI * 2,
+  }));
+}
+
+function kindRadius(kind: DefeatExplosionKind): number {
+  if (kind === 'boss') return 18;
+  if (kind === 'player') return 14;
+  return 10;
+}
+
+/** 击破特效 mode1：程序化光晕与火花 */
+class DefeatExplosionMode1 implements DefeatExplosionImpl {
   finished = false;
   private elapsed = 0;
   private readonly flashes: FlashPoint[];
@@ -37,18 +70,8 @@ export class DefeatExplosion {
     private readonly kind: DefeatExplosionKind,
     private readonly onComplete?: () => void,
   ) {
-    const count = FLASH_COUNT[kind];
-    const spreadX = anchor.halfW * (kind === 'boss' ? 2.1 : 1.75);
-    const spreadY = anchor.halfH * (kind === 'boss' ? 2.1 : 1.75);
-    const baseScale = kind === 'boss' ? 1.15 : kind === 'player' ? 0.95 : 0.8;
-
-    this.flashes = Array.from({ length: count }, () => ({
-      x: anchor.cx + (Math.random() - 0.5) * spreadX,
-      y: anchor.cy + (Math.random() - 0.5) * spreadY,
-      scale: baseScale * (0.75 + Math.random() * 0.55),
-      rotation: Math.random() * Math.PI * 2,
-    }));
-    this.totalDuration = count * FLASH_DURATION;
+    this.flashes = buildFlashPoints(anchor, kind);
+    this.totalDuration = this.flashes.length * FLASH_DURATION;
   }
 
   update(dt: number): void {
@@ -69,7 +92,7 @@ export class DefeatExplosion {
     );
     const localT = this.elapsed - flashIndex * FLASH_DURATION;
     const fade = 1 - localT / FLASH_DURATION;
-    const pulse = 0.55 + Math.sin(localT / FLASH_DURATION * Math.PI) * 0.45;
+    const pulse = 0.55 + Math.sin((localT / FLASH_DURATION) * Math.PI) * 0.45;
     const alpha = fade * pulse;
 
     if (alpha <= 0.02) return;
@@ -87,7 +110,7 @@ export class DefeatExplosion {
     alpha: number,
   ): void {
     const palette = this.getPalette();
-    const coreR = (kindRadius(this.kind)) * scale;
+    const coreR = kindRadius(this.kind) * scale;
     const ringR = coreR * 2.2;
     const sparkLen = coreR * (this.kind === 'boss' ? 3.2 : 2.6);
 
@@ -160,8 +183,88 @@ export class DefeatExplosion {
   }
 }
 
-function kindRadius(kind: DefeatExplosionKind): number {
-  if (kind === 'boss') return 18;
-  if (kind === 'player') return 14;
-  return 10;
+/** 击破特效 mode2：精灵图随机三帧，在机体图层内随机位置播放 */
+class DefeatExplosionMode2 implements DefeatExplosionImpl {
+  finished = false;
+  private elapsed = 0;
+  private readonly flashes: FlashPoint[];
+  private readonly frameIndices: [number, number, number];
+  private readonly totalDuration: number;
+
+  constructor(
+    anchor: DefeatAnchor,
+    private readonly kind: DefeatExplosionKind,
+    private readonly onComplete?: () => void,
+  ) {
+    this.flashes = buildFlashPoints(anchor, kind);
+    this.frameIndices = pickRandomDefeatBoomFrames();
+    this.totalDuration = this.flashes.length * FLASH_DURATION;
+  }
+
+  update(dt: number): void {
+    if (this.finished) return;
+    this.elapsed += dt;
+    if (this.elapsed >= this.totalDuration) {
+      this.finished = true;
+      this.onComplete?.();
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    if (this.finished) return;
+
+    const flashIndex = Math.min(
+      this.flashes.length - 1,
+      Math.floor(this.elapsed / FLASH_DURATION),
+    );
+    const localT = this.elapsed - flashIndex * FLASH_DURATION;
+    const fade = 1 - localT / FLASH_DURATION;
+    const pulse = 0.55 + Math.sin((localT / FLASH_DURATION) * Math.PI) * 0.45;
+    const alpha = fade * pulse;
+
+    if (alpha <= 0.02) return;
+
+    const spriteIndex = this.frameIndices[flashIndex % 3];
+    const frame = getDefeatBoomFrame(spriteIndex);
+    if (!frame) return;
+
+    const flash = this.flashes[flashIndex];
+    const size = kindRadius(this.kind) * 4.2 * flash.scale;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(flash.x, flash.y);
+    ctx.rotate(flash.rotation);
+    ctx.drawImage(frame, -size / 2, -size / 2, size, size);
+    ctx.restore();
+  }
+}
+
+/** 机体图层上的击破爆破：在锚定区域内随机位置闪烁 */
+export class DefeatExplosion implements DefeatExplosionImpl {
+  private readonly impl: DefeatExplosionImpl;
+
+  constructor(
+    anchor: DefeatAnchor,
+    kind: DefeatExplosionKind,
+    onComplete?: () => void,
+    mode: DefeatExplosionMode = DEFEAT_EXPLOSION_MODE,
+  ) {
+    this.impl =
+      mode === 1
+        ? new DefeatExplosionMode1(anchor, kind, onComplete)
+        : new DefeatExplosionMode2(anchor, kind, onComplete);
+  }
+
+  get finished(): boolean {
+    return this.impl.finished;
+  }
+
+  update(dt: number): void {
+    this.impl.update(dt);
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    this.impl.draw(ctx);
+  }
 }

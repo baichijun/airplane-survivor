@@ -37,7 +37,7 @@ import {
   playerMinY,
 } from '../config/balance';
 import type { GameMode, PauseKind, RelicRewardOption, UpgradeDef, UpgradePickCounts } from '../types';
-import { DefeatExplosion, type DefeatExplosionKind } from '../effects/DefeatExplosion';
+import { DefeatExplosion, DEFEAT_EXPLOSION_MODE, type DefeatExplosionKind } from '../effects/DefeatExplosion';
 
 /** 背景星空粒子数量 */
 const STAR_COUNT = 30;
@@ -248,7 +248,7 @@ export class Game {
     onComplete?: () => void,
   ): void {
     this.defeatExplosions.push(
-      new DefeatExplosion({ cx, cy, halfW, halfH }, kind, onComplete),
+      new DefeatExplosion({ cx, cy, halfW, halfH }, kind, onComplete, DEFEAT_EXPLOSION_MODE),
     );
   }
 
